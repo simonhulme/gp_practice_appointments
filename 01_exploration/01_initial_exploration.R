@@ -201,6 +201,7 @@ wakefield_hcp_type_day_tbl %>%
 
 # errors or events?
 
+# - Single
 wakefield_total_day_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
@@ -213,4 +214,135 @@ wakefield_total_day_tbl %>%
         .alpha = 0.2,
         .interactive = T
     )
+
+# - Grouped
+wakefield_appt_mode_day_tbl %>% 
+    filter(appointment_mode %in% c("Face-to-Face", "Home Visit", "Telephone")) %>% 
+    group_by(appointment_mode) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)
+    ) %>% 
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T
+    )
+    
+wakefield_appt_status_day_tbl %>% 
+    filter(appointment_status %in% c("Attended", "DNA")) %>%
+    group_by(appointment_status) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)
+    ) %>% 
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T
+    )
+
+wakefield_hcp_type_day_tbl %>% 
+    filter(hcp_type %in% c("GP", "Other Practice staff")) %>%
+    group_by(hcp_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)
+    ) %>% 
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.1,
+        .interactive = T
+    )
+
+# Seasonal Decomposition ----
+
+# single time series 
+
+wakefield_total_day_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>%
+    plot_stl_diagnostics(appointment_date, appointments, .frequency = "28 days")
+
+# grouped time series
+
+wakefield_appt_mode_day_tbl %>% 
+    filter(appointment_mode %in% c("Face-to-Face", "Home Visit", "Telephone")) %>% 
+    group_by(appointment_mode) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>% 
+    plot_stl_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .frequency = "12 months",
+        .trend = "3 months"
+    )
+
+wakefield_appt_status_day_tbl %>% 
+    filter(appointment_status %in% c("Attended", "DNA")) %>%
+    group_by(appointment_status) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>% 
+    plot_stl_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .frequency = "12 months"
+    )
+
+
+wakefield_hcp_type_day_tbl %>% 
+    filter(hcp_type %in% c("GP", "Other Practice staff")) %>%
+    group_by(hcp_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>% 
+    plot_stl_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .frequency = "12 months",
+        .trend = "12 months"
+    )
+
+# Time Series Regression Plot ----
+
+wakefield_total_day_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = 
+            appointments ~ as.numeric(appointment_date)
+    )
+
+wakefield_total_day_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ 
+            as.numeric(appointment_date) + 
+            month(appointment_date, label = TRUE))
 

@@ -128,5 +128,89 @@ wakefield_hcp_type_day_tbl %>%
                      .smooth = FALSE,
                      .title = "Monthly Time Series Plot - HCP Type")
 
+# ACF Diagnostics ----
 
+## ACF / PACF ----
+
+# Total by Day
+wakefield_total_day_tbl %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, appointments)
+
+# GP appointments by Week 
+wakefield_hcp_type_day_tbl %>%
+    filter(hcp_type == "GP") %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>%
+    plot_acf_diagnostics(.date_var = appointment_date, appointments, .lags = "3 years")
+
+## CCF ----
+# - Lagged External Regressors
+
+# univariate series only - review after identifying potential data
+
+# Seasonality ----
+# - Detecting Time-Based Features
+
+wakefield_total_day_tbl %>%
+    plot_seasonal_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .feature_set = c("wday.lbl", "month.lbl", "year"),
+        .title = "Total Appointments",
+        .interactive = FALSE
+    )
+
+wakefield_appt_mode_day_tbl %>%
+    filter(appointment_mode %in% c("Face-to-Face", "Home Visit", "Telephone")) %>% 
+    plot_seasonal_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .facet_vars = appointment_mode,
+        .feature_set = c("wday.lbl", "month.lbl", "year"),
+        .title = "Appointments by Mode",
+        .interactive = FALSE
+    )
+
+wakefield_appt_status_day_tbl %>%
+    filter(appointment_status %in% c("Attended", "DNA")) %>%
+    plot_seasonal_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .facet_vars = appointment_status,
+        .feature_set = c("wday.lbl", "month.lbl", "year"),
+        .title = "Appointments by Status",
+        .interactive = FALSE
+    )
+
+wakefield_hcp_type_day_tbl %>%
+    filter(hcp_type %in% c("GP", "Other Practice staff")) %>%
+    plot_seasonal_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .facet_vars = hcp_type, 
+        .feature_set = c("wday.lbl", "month.lbl", "year"),
+        .title = "Appointments by Health Care Professional",
+        .interactive = FALSE,
+        .geom = "boxplot"
+    )
+
+# Anomalies ----
+
+# errors or events?
+
+wakefield_total_day_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)
+    ) %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.2,
+        .interactive = T
+    )
 

@@ -41,3 +41,10 @@ wakefield_hcp_type_day_tbl    <- read_rds("00_data/processed/wakefield_hcp_type_
 wakefield_hcp_type_day_tbl %>% 
     group_by(hcp_type) %>% 
     plot_time_series(.date_var = appointment_date, .value = appointments)
+
+# FINDINGS ----
+
+# TODO ----
+
+
+

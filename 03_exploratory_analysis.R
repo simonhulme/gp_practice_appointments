@@ -308,3 +308,9 @@ appointments_by_hcp %>%
             week(appointment_date) +
             year(appointment_date),
         .show_summary = TRUE)
+
+# FINDINGS ----
+
+
+
+# TODO ----

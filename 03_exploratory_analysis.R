@@ -1,17 +1,74 @@
+# Exploratory Analysis ----
+
+## Set Up ----
+
+# Load Libraries
+
 library(tidyverse)
 library(timetk)
 library(DataExplorer)
 
-# ACF Diagnostics ----
+# Import Data 
+
+## Start with Totals 
+
+total_appointments   <-
+    read_rds("00_data/processed/sliced/total/wakefield_total_5_day_tbl.rds")
+
+appointments_by_mode <-
+    read_rds("00_data/processed/sliced/appt_mode/wakefield_appt_mode_5_day_sliced_tbl.rds")
+
+appointments_by_hcp <- 
+    read_rds("00_data/processed/sliced/hcp_type/wakefield_hcp_type_5_day_sliced_tbl.rds")
 
 ## ACF / PACF ----
 
-# Total by Day
-wakefield_total_day_tbl %>% 
-    plot_acf_diagnostics(.date_var = appointment_date, appointments)
+### Total Appointments ----
+
+total_appointments %>% 
+    plot_acf_diagnostics(
+        .date_var = appointment_date, 
+        .value = appointments,
+        .title = "Lag diagnostics: Total Appointments by Day")
+
+total_appointments %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = sum(appointments)) %>% 
+    plot_acf_diagnostics(
+        .date_var = appointment_date, 
+        .value = appointments,
+        .title = "Lag diagnostics: Total Appointments by Week")
+
+total_appointments %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "month", appointments = sum(appointments)) %>% 
+    plot_acf_diagnostics(
+        .date_var = appointment_date, 
+        .value = appointments,
+        .title = "Lag diagnostics: Total Appointments by Month")
+
+## Appointment Mode ----
+
+appointments_by_mode %>% 
+    group_by(appointment_mode) %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "month", appointments = sum(appointments)) %>% 
+    plot_acf_diagnostics(
+        .date_var = appointment_date, 
+        .value = appointments,
+        .title = "Lag diagnostics: Appointment Mode by Month")
+
+## Health Care Professional ----
+
+appointments_by_hcp %>% 
+    group_by(hcp_type) %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = sum(appointments)) %>% 
+    plot_acf_diagnostics(
+        .date_var = appointment_date, 
+        .value = appointments,
+        .title = "Lag diagnostics: HCP type by Week")
+
+## Will need to focus on sub groups within the data e.g. GP appointments total and by appointment mode
 
 # GP appointments by Week 
-wakefield_hcp_type_day_tbl %>%
+appointments_by_hcp %>%
     filter(hcp_type == "GP") %>%
     summarise_by_time(
         .date_var = appointment_date,
@@ -26,9 +83,10 @@ wakefield_hcp_type_day_tbl %>%
 # univariate series only - review after identifying potential data
 
 # Seasonality ----
-# - Detecting Time-Based Features
 
-wakefield_total_day_tbl %>%
+## Total Appointments ----
+
+total_appointments %>%
     plot_seasonal_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
@@ -37,46 +95,72 @@ wakefield_total_day_tbl %>%
         .interactive = FALSE, 
     )
 
-wakefield_appt_mode_day_tbl %>%
-    filter(appointment_mode %in% c("Face-to-Face", "Home Visit", "Telephone")) %>% 
+## Total GP Appointments ----
+
+appointments_by_hcp %>%
+    filter(hcp_type == "GP") %>% 
     plot_seasonal_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
-        .facet_vars = appointment_mode,
-        .feature_set = c("wday.lbl", "month.lbl", "year"),
-        .title = "Appointments by Mode",
-        .interactive = FALSE
+        .feature_set = c("wday.lbl", "week", "month.lbl", "year"),
+        .title = "Total GP Appointments",
+        .interactive = FALSE, 
+    )
+   
+## Total Other Staff Appointments ----
+
+appointments_by_hcp %>%
+    filter(hcp_type == "Other Practice staff") %>% 
+    plot_seasonal_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .feature_set = c("wday.lbl", "week", "month.lbl", "year"),
+        .title = "Total Other Practice Staff Appointments",
+        .interactive = FALSE, 
     )
 
-wakefield_appt_status_day_tbl %>%
-    filter(appointment_status %in% c("Attended", "DNA")) %>%
-    plot_seasonal_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .facet_vars = appointment_status,
-        .feature_set = c("wday.lbl", "month.lbl", "year"),
-        .title = "Appointments by Status",
-        .interactive = FALSE
-    )
+## Total Non GP assigned Appointments ----
 
-wakefield_hcp_type_day_tbl %>%
-    filter(hcp_type %in% c("GP", "Other Practice staff")) %>%
+appointments_by_hcp %>% 
+    filter(hcp_type != "GP") %>% 
     plot_seasonal_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
-        .facet_vars = hcp_type, 
-        .feature_set = c("wday.lbl", "month.lbl", "year"),
-        .title = "Appointments by Health Care Professional",
-        .interactive = FALSE,
-        .geom = "boxplot"
+        .feature_set = c("wday.lbl", "week", "month.lbl", "year"),
+        .title = "Total Non GP assigned Appointments",
+        .interactive = FALSE, 
     )
 
 # Anomalies ----
 
-# errors or events?
+# Errors or events?
 
-# - Single
-wakefield_total_day_tbl %>%
+## Total Appointments ----
+
+total_appointments %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T, 
+        .title = "Mutiple Low Daily Values - Explore Bank Holidays and Training Afternoons"
+    )
+
+total_appointments %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T,
+        .title = "Low Weekly Values - Explore Holidays and Effect of Pandemic "
+    )
+
+total_appointments %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -85,17 +169,18 @@ wakefield_total_day_tbl %>%
     plot_anomaly_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
-        .alpha = 0.2,
-        .interactive = T
+        .alpha = 0.05,
+        .interactive = T,
+        .title = "Single low value - Impact of Pandemic "
     )
 
-# - Grouped
-wakefield_appt_mode_day_tbl %>% 
-    filter(appointment_mode %in% c("Face-to-Face", "Home Visit", "Telephone")) %>% 
-    group_by(appointment_mode) %>% 
+## Total Appointments By HCP ----
+
+appointments_by_hcp %>% 
+    group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "month",
+        .by = "week",
         appointments = sum(appointments)
     ) %>% 
     plot_anomaly_diagnostics(
@@ -105,23 +190,7 @@ wakefield_appt_mode_day_tbl %>%
         .interactive = T
     )
 
-wakefield_appt_status_day_tbl %>% 
-    filter(appointment_status %in% c("Attended", "DNA")) %>%
-    group_by(appointment_status) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(appointments)
-    ) %>% 
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T
-    )
-
-wakefield_hcp_type_day_tbl %>% 
-    filter(hcp_type %in% c("GP", "Other Practice staff")) %>%
+appointments_by_hcp %>% 
     group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -131,7 +200,7 @@ wakefield_hcp_type_day_tbl %>%
     plot_anomaly_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
-        .alpha = 0.1,
+        .alpha = 0.05,
         .interactive = T
     )
 
@@ -139,67 +208,34 @@ wakefield_hcp_type_day_tbl %>%
 
 # single time series 
 
-wakefield_total_day_tbl %>%
+total_appointments %>%
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "week",
+        .by = "day",
         appointments = sum(appointments)
     ) %>%
-    plot_stl_diagnostics(appointment_date, appointments, .frequency = "28 days")
+    plot_stl_diagnostics(appointment_date, appointments, .frequency = "7 days")
+
 
 # grouped time series
 
-wakefield_appt_mode_day_tbl %>% 
-    filter(appointment_mode %in% c("Face-to-Face", "Home Visit", "Telephone")) %>% 
-    group_by(appointment_mode) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(appointments)
-    ) %>% 
-    plot_stl_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .frequency = "12 months",
-        .trend = "3 months"
-    )
-
-wakefield_appt_status_day_tbl %>% 
-    filter(appointment_status %in% c("Attended", "DNA")) %>%
-    group_by(appointment_status) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(appointments)
-    ) %>% 
-    plot_stl_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .frequency = "12 months"
-    )
-
-wakefield_hcp_type_day_tbl %>% 
-    filter(hcp_type %in% c("GP", "Other Practice staff")) %>%
+appointments_by_hcp %>%
     group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "week",
+        .by = "month",
         appointments = sum(appointments)
-    ) %>% 
-    plot_stl_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .frequency = "12 months",
-        .trend = "12 months"
-    )
+    ) %>%
+    plot_stl_diagnostics(appointment_date, appointments, .frequency = "12 months")
+
 
 # Time Series Regression Plot ----
 
 # Single Time Series
-wakefield_total_day_tbl %>%
+total_appointments %>%
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "week",
+        .by = "month",
         appointments = sum(appointments)
     ) %>%
     plot_time_series_regression(
@@ -211,9 +247,8 @@ wakefield_total_day_tbl %>%
         .show_summary = TRUE)
 
 # Grouped Time Series
-wakefield_appt_mode_day_tbl %>%
-    filter(appointment_mode %in% c("Face-to-Face", "Home Visit", "Telephone")) %>% 
-    group_by(appointment_mode) %>% 
+appointments_by_hcp %>%
+    group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "week",
@@ -226,37 +261,3 @@ wakefield_appt_mode_day_tbl %>%
             week(appointment_date) +
             year(appointment_date),
         .show_summary = TRUE)
-
-wakefield_appt_status_day_tbl %>% 
-    filter(appointment_status %in% c("Attended", "DNA")) %>%
-    group_by(appointment_status) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(appointments)
-    ) %>%
-    plot_time_series_regression(
-        .date_var = appointment_date,
-        .formula = appointments ~ 
-            as.numeric(appointment_date) +
-            month(appointment_date, label = TRUE) +
-            week(appointment_date) +
-            year(appointment_date),
-        .show_summary = TRUE)
-
-wakefield_hcp_type_day_tbl %>% 
-    filter(hcp_type %in% c("GP", "Other Practice staff")) %>%
-    group_by(hcp_type) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(appointments)
-    ) %>%
-    plot_time_series_regression(
-        .date_var = appointment_date,
-        .formula = appointments ~ 
-            as.numeric(appointment_date) +
-            month(appointment_date, label = TRUE) +
-            week(appointment_date) +
-            year(appointment_date),
-        .show_summary = TRUE

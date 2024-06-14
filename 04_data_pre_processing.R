@@ -20,3 +20,5 @@ appointments_by_mode <-
 
 appointments_by_hcp <- 
     read_rds("00_data/processed/sliced/hcp_type/wakefield_hcp_type_5_day_sliced_tbl.rds")
+
+

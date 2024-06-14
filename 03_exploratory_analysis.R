@@ -10,16 +10,63 @@ library(DataExplorer)
 
 # Import Data 
 
+total_appointments   <-
+    read_rds("00_data/processed/sliced/total/wakefield_total_5_day_tbl.rds")
+
+# Exploratory Analysis ----
+
+## Set Up ----
+
+# Load Libraries
+
+library(tidyverse)
+library(timetk)
+library(DataExplorer)
+
+# Import Data 
+
 ## Start with Totals 
 
 total_appointments   <-
     read_rds("00_data/processed/sliced/total/wakefield_total_5_day_tbl.rds")
 
+appointments_by_hcp <- 
+    read_rds("00_data/processed/sliced/hcp_type/wakefield_hcp_type_5_day_sliced_tbl.rds")
+
 appointments_by_mode <-
     read_rds("00_data/processed/sliced/appt_mode/wakefield_appt_mode_5_day_sliced_tbl.rds")
 
-appointments_by_hcp <- 
-    read_rds("00_data/processed/sliced/hcp_type/wakefield_hcp_type_5_day_sliced_tbl.rds")
+## Summaries 
+
+total_appointments %>%
+    mutate_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments_avg = mean(appointments)
+    ) %>% 
+    pivot_longer(cols = contains("appointments")) %>% 
+    plot_time_series(.date_var = appointment_date, .value = value, .color_var = name)
+
+appointments_by_hcp %>%
+    group_by(hcp_type) %>% 
+    mutate_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments_avg = mean(appointments)
+    ) %>% 
+    pivot_longer(cols = contains("appointments")) %>% 
+    plot_time_series(.date_var = appointment_date, .value = value, .color_var = name)
+               
+appointments_by_mode %>%
+    group_by(appointment_mode) %>% 
+    mutate_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments_avg = mean(appointments)
+    ) %>% 
+    pivot_longer(cols = contains("appointments")) %>% 
+    plot_time_series(.date_var = appointment_date, .value = value, .color_var = name)
+       
 
 ## ACF / PACF ----
 

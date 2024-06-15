@@ -240,13 +240,17 @@ time_between_book_and_appt_monthly_appts %>%
 ## 2. historic data quality issues near start of time series ----
 ### * different time periods depending on feature ----
 
-## 3. levels duplicated 
+## 3. Categorical data encoded as strings ----
+
+## 4. levels duplicated 
 ### * video / online appointment modes ----
 ### * unknown vs. data not provided ----
 ### • data quality vs. data issue
 
+
 # TODO ----
 
 ## * convert to 5-day business week ----
+## * encode categorical variables as factors ----
 ## * combine levels for features where duplicated ----
 ## * slice time series to exclude significant data quality problems ----

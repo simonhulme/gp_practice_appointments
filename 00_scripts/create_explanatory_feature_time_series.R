@@ -4,7 +4,7 @@
 
 ## Trinity Medical Centre ----
 
-### Codes ----
+### Codes
 
 ## WFD ODS CODE : 03R
 ## WFD PHE CODE : E38000190
@@ -12,8 +12,6 @@
 
 library(tidyverse)
 library(fingertipsR)
-
-inds <- indicators(ProfileID = 21)
 
 ### QOF Population Data ----
 
@@ -29,8 +27,5 @@ qof_annual_population <-
 
 write_rds(qof_annual_population, "00_data/raw/qof_annual_population.rds")
 
-### Registered Population Data ----
-
-registered_annual_population <-  
-    fingertips_data(IndicatorID = 337, AreaTypeID = 7)
+###  TODO ----
 

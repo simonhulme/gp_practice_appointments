@@ -10,8 +10,11 @@ library(DataExplorer)
 
 # Import Data 
 
-all_appointments_daily_tbl   <-
+all_appointments_daily_tbl <-
     read_rds("00_data/processed/wakefield_daily_prepared.rds")
+
+population_monthly_tbl <- 
+    read_rds("00_data/processed/wakefield_population_monthly.rds")
 
 # Exploratory Analysis ----
 
@@ -81,10 +84,24 @@ gp_appointments_attended_weekly_tbl %>%
 
 ## CCF ----
 
-# - Lagged External Regressors
+total_appointments_attended_monthly_tbl <- 
+    all_appointments_daily_tbl %>% 
+    filter(appt_status == "Attended") %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "month", appointments = sum(count_of_appointments))
 
-# univariate series only - review after identifying potential data
+total_appointments_attended_monthly_tbl %>% 
+    plot_time_series(.date_var = appointment_date, .value = appointments)
 
+total_appts_attended_population_monthly_tbl <- 
+    total_appointments_attended_monthly_tbl %>% 
+    left_join(population_monthly_tbl, by =c("appointment_date" = "extract_date"))
+
+total_appts_attended_population_monthly_tbl %>%
+    drop_na() %>%
+    plot_acf_diagnostics(.date_var = appointment_date,
+                         .value = appointments,
+                         .ccf_vars = registered_population,
+                         .show_ccf_vars_only = TRUE)
 
 # Seasonality ----
 

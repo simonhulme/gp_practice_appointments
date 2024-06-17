@@ -1,4 +1,4 @@
-# Extract daily data for Wakefield ----
+# Extract Daily GP Appointments Data for chosen area (Wakefield) ----
 
 library(tidyverse)
 library(timetk)

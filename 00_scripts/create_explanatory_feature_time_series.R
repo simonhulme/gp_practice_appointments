@@ -70,9 +70,36 @@ registered_population <-
 write_rds(registered_population, "00_data/processed/wakefield_population_monthly.rds")
 
 
-## Extract Monthly GP Online Consultation Data for chosen area (Wakefield) ----
+## Extract Monthly GP Workforce Data for chosen area (Wakefield) ----
 
-## SUB-ICB LOCATION CODE: 03R
+base_url <- "https://digital.nhs.uk/data-and-information/publications/statistical/general-and-personal-medical-services/"
+
+## create sequence of dates representing last day of each month 
+
+dates <- 
+    seq.Date(from = as.Date("2019-05-01"), to = as.Date("2024-05-01"), by = "month") %>% 
+    ceiling_date() - days(1)
+    
+dates_formatted <- format.Date(dates, "%d-%B-%Y")
+
+
+### Create vector of full url (base + date)
+
+full_url <- paste0(base_url, dates_formatted)
+
+full_url
+
+
+
+
+
+
+
+
+
+
+
+## TODO ----
 
 get_gp_data_daily <- function(url) {
     

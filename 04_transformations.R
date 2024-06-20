@@ -242,9 +242,92 @@ daily_appts_with_holidays %>%
 
 # Moving averages and smoothing transformation ----
 
+## Moving / Rolling Averages ----
 
+### Total Appointments Monthly
+all_appointments_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(count_of_appointments)
+    ) %>% 
+    mutate(appointments_roll = slidify_vec(appointments, mean, .period = 12, .align = "center")) %>%
+    pivot_longer(contains("appointments"), names_to = "type") %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = value,
+        .color_var = type,
+        .smooth = FALSE
+    )
 
+### Mean Same Day GP Appt per day by mode - Weekly
+same_day_attended_gp_weekly_mean_by_mode_tbl <-
+    all_appointments_daily_tbl %>%
+    filter(hcp_type == "GP",
+           ! appt_mode %in% c("Unknown", "Video Conference/Online"),
+           time_between_book_and_appt == "Same Day",
+           appt_status == "Attended") %>%
+    group_by(appt_mode) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        mean_daily_appointments = mean(appointments)
+    ) 
 
+same_day_attended_gp_weekly_mean_by_mode_tbl %>%
+    mutate(
+        rolled_mean_appointments = slidify_vec(
+            mean_daily_appointments,
+            mean,
+            .period = 52,
+            .align = "center"
+        )
+    ) %>%
+    pivot_longer(contains("mean"), names_to = "type") %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = value,
+        .color_var = type,
+        .smooth = FALSE
+    ) 
 
+## Smoothing using LOESS ----
 
+### Total Appointments Monthly
+all_appointments_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(count_of_appointments)
+    ) %>% 
+    mutate(appointments_smooth = smooth_vec(appointments, period = 12)) %>%
+    pivot_longer(contains("appointments"), names_to = "type") %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = value,
+        .color_var = type,
+        .smooth = FALSE
+    )
 
+### Mean Same Day GP Appt per day by mode - Weekly
+
+same_day_attended_gp_weekly_mean_by_mode_tbl %>%
+    mutate(
+        smooth_mean_appointments = smooth_vec(
+            mean_daily_appointments,
+            period = 52
+        )
+    ) %>%
+    pivot_longer(contains("mean"), names_to = "type") %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = value,
+        .color_var = type,
+        .smooth = FALSE, 
+        .title = "Mean Daily Same Day Face-to-Face GP Appointments Attended per Week"
+    ) 

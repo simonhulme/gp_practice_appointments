@@ -16,7 +16,18 @@ all_appointments_daily_tbl <-
 population_monthly_tbl <- 
     read_rds("00_data/processed/wakefield_population_monthly.rds")
 
-# Exploratory Analysis ----
+# Non Time Series Exploratory Analysis ----
+
+## Summary Statistics ----
+
+
+
+
+
+
+
+
+# Time series Exploratory Analysis ----
 
 ## ACF / PACF ----
 

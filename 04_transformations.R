@@ -331,3 +331,17 @@ same_day_attended_gp_weekly_mean_by_mode_tbl %>%
         .smooth = FALSE, 
         .title = "Mean Daily Same Day Face-to-Face GP Appointments Attended per Week"
     ) 
+
+## Revisit Decomposition using STL ----
+
+all_appointments_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_stl_diagnostics(.date_var = appointment_date,
+                         .value = appointments, 
+                         .trend = "1 year",
+                         .frequency = "1 week", 
+                         .feature_set = c("observed", "season", "trend", "remainder"))

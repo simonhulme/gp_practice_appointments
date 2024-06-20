@@ -1,143 +1,209 @@
-# Exploratory Analysis ----
+# Exploratory Data Analysis ----
 
-## Set Up ----
-
-# Load Libraries
+# Set Up
 
 library(tidyverse)
 library(timetk)
-library(DataExplorer)
+# library(DataExplorer)
 
-# Import Data 
+wakefield_working_week_daily <-
+    read_rds("00_data/processed/wakefield_working_week_daily.rds")
 
-all_appointments_daily_tbl <-
-    read_rds("00_data/processed/wakefield_daily_prepared.rds")
-
-population_monthly_tbl <- 
-    read_rds("00_data/processed/wakefield_population_monthly.rds")
-
-# Non Time Series Exploratory Analysis ----
+# Basic Analysis ----
 
 ## Summary Statistics ----
 
+skimr::skim(wakefield_working_week_daily)
 
+## Exploratory Visualisation ----
 
+### Overall Total Appointments by Feature ----
 
+wakefield_working_week_daily %>%
+    group_by(hcp_type) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    mutate(hcp_type = fct_reorder(hcp_type, -total_appointments)) %>%
+    ggplot(aes(hcp_type, total_appointments)) +
+    geom_col(fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    ggtitle("Only a small proportion of appointments have unknown HCP type")
 
+wakefield_working_week_daily %>%
+    group_by(appt_mode) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    mutate(appt_mode = fct_reorder(appt_mode, -total_appointments)) %>%
+    ggplot(aes(appt_mode, total_appointments)) +
+    geom_col(fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    ggtitle("'Face-to-Face' and 'Telephone' account for most appointments")
 
+wakefield_working_week_daily %>%
+    group_by(appt_status) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    mutate(prop = proportions(total_appointments)) %>%
+    mutate(appt_status = fct_reorder(appt_status, -total_appointments)) %>%
+    ggplot(aes(x = factor(1), y = prop, fill = appt_status)) +
+    geom_col() +
+    theme_bw() +
+    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+    scale_fill_brewer(palette = 8) +
+    labs(title = "3.3% of appointments recorded as DNA",
+         x = "",
+         y = "Proportion",
+         fill = "Appointment status")
 
+wakefield_working_week_daily %>%
+    group_by(time_between_book_and_appt) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    ggplot(aes(time_between_book_and_appt, total_appointments)) +
+    geom_col(fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    ggtitle("'Same Day' accounts for most appointments") +
+    xlab("Time between booking and appointment date") +
+    coord_flip()
+
+### Bivariate analysis ----
+
+#### Appointment Mode vs Time Between Booking and Appointment (GP appointments)
+wakefield_working_week_daily %>%
+    filter(hcp_type == "GP") %>%
+    group_by(appt_mode, time_between_book_and_appt) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    ggplot(aes(time_between_book_and_appt, total_appointments, fill = appt_mode)) +
+    geom_col(position = "fill") +
+    theme_bw() +
+    labs(title = "Increasing proportion telephone appts for appts booked more recently")
+
+#### Time Between Booking and Appointment vs Appt Status/DNA (GP appointments)
+wakefield_working_week_daily %>%
+    filter(hcp_type == "GP") %>%
+    mutate(appt_status = fct_relevel(appt_status, c("Attended", "Unknown", "DNA"))) %>%
+    group_by(appt_status, time_between_book_and_appt) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    ggplot(aes(time_between_book_and_appt, total_appointments, fill = appt_status)) +
+    geom_col(position = "fill") +
+    theme_bw() +
+    scale_fill_brewer(palette = 9) +
+    labs(title = "Very few DNA for same day appointments",
+         subtitle = "DNA and Unknown proportion increases as delay increases")
 
 # Time series Exploratory Analysis ----
 
-## ACF / PACF ----
+## Series 1: All GP Appointments
 
-### Total Appointments ----
+gp_total_daily_tbl <-
+    wakefield_working_week_daily %>%
+    filter(hcp_type == "GP") %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    )
 
-total_appointments_daily_tbl <- 
-    all_appointments_daily_tbl %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "day", appointments = sum(count_of_appointments))
-    
-total_appointments_daily_tbl %>% 
+gp_total_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = total_appointments,
+                     .title = "Time Series Plot: All GP Appointments")
+
+gp_total_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = total_appointments,
+                     .title = "Time Series Plot: All GP Appointments")
+
+gp_total_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = total_appointments,
+                     .title = "Time Series Plot: All GP Appointments")
+
+
+## Create new dataset with focus on all same day GP appointments ----
+gp_same_day_daily_tbl <-
+    wakefield_working_week_daily %>%
+    filter(hcp_type == "GP", time_between_book_and_appt == "Same Day") %>%
+    group_by(appt_mode) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    ungroup()
+
+## Time Series Plots ----
+
+gp_same_day_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date, .value = total_appointments)
+
+gp_same_day_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date, .value = total_appointments)
+
+gp_same_day_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date, .value = total_appointments)
+
+## Autocorrelation Functions ACF/PACF ----
+
+gp_same_day_daily_tbl %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        total_appointments = sum(appointments)
+    ) %>%
     plot_acf_diagnostics(
-        .date_var = appointment_date, 
-        .value = appointments, 
-        .lags = 260,
-        .title = "Lag diagnostics: Total Appointments by Day", .plotly_slider = TRUE)
-
-total_appointments_daily_tbl %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = sum(appointments)) %>% 
-    plot_acf_diagnostics(
-        .date_var = appointment_date, 
-        .value = appointments,
-        .title = "Lag diagnostics: Total Appointments by Week")
-
-total_appointments_daily_tbl %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "month", appointments = sum(appointments)) %>% 
-    plot_acf_diagnostics(
-        .date_var = appointment_date, 
-        .value = appointments,
-        .title = "Lag diagnostics: Total Appointments by Month")
+        .date_var = appointment_date,
+        .value = total_appointments,
+        .lags = 120,
+        .interactive = TRUE,
+        .title = "Demonstrates presence of autocorrelation and 5-day week seasonality"
+    )
 
 
-### GP appointments ----
+## Cross Correlation (CCF) ----
 
-gp_appointments_attended_daily_tbl <- 
-    all_appointments_daily_tbl %>% 
-    filter(hcp_type == "GP", appt_status == "Attended", appt_mode != "Unknown") %>% 
-    group_by(appt_mode) %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "day", appointments = sum(count_of_appointments))
-
-gp_appointments_attended_daily_tbl %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments)
-
-gp_appointments_attended_daily_tbl %>% 
-    plot_acf_diagnostics(
-        .date_var = appointment_date, 
-        .value = appointments, 
-        .lags = 260,
-        .title = "Lag diagnostics: GP Appointments Attended by Day")
-
-gp_appointments_attended_weekly_tbl <- 
-    all_appointments_daily_tbl %>% 
-    filter(hcp_type == "GP", appt_status == "Attended", appt_mode != "Unknown") %>% 
-    group_by(appt_mode) %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = sum(count_of_appointments))
-
-gp_appointments_attended_weekly_tbl %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments)
-
-gp_appointments_attended_weekly_tbl %>% 
-    plot_acf_diagnostics(
-        .date_var = appointment_date, 
-        .value = appointments, 
-        .lags = 53,
-        .title = "Lag diagnostics: GP Appointments Attended by Week")
-
-## CCF ----
-
-total_appointments_attended_monthly_tbl <- 
-    all_appointments_daily_tbl %>% 
-    filter(appt_status == "Attended") %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "month", appointments = sum(count_of_appointments))
-
-total_appointments_attended_monthly_tbl %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments)
-
-total_appts_attended_population_monthly_tbl <- 
-    total_appointments_attended_monthly_tbl %>% 
-    left_join(population_monthly_tbl, by =c("appointment_date" = "extract_date"))
-
-total_appts_attended_population_monthly_tbl %>%
-    drop_na() %>%
-    plot_acf_diagnostics(.date_var = appointment_date,
-                         .value = appointments,
-                         .ccf_vars = registered_population,
-                         .show_ccf_vars_only = TRUE)
+# TODO: need new variables to add in ?lagged indicators
 
 # Seasonality ----
 
-## Total Appointments ----
-
-total_appointments_daily_tbl %>%
+gp_same_day_daily_tbl %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
     plot_seasonal_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
-        .feature_set = c("wday.lbl", "week", "month.lbl", "year"),
-        .title = "Total Appointments",
-        .interactive = FALSE 
-    )
-
-## GP Appointments ----
-
-gp_appointments_attended_daily_tbl %>%
-    plot_seasonal_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .feature_set = c("wday.lbl", "week", "month.lbl", "year"),
+        .feature_set = c("wday.lbl", "month.lbl", "year"),
         .title = "Total GP Appointments",
-        .interactive = FALSE, 
-    )
-   
+        .facet_vars = appt_mode,
+        .interactive = FALSE
+    ) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
 
 # Anomalies ----
 
@@ -145,13 +211,19 @@ gp_appointments_attended_daily_tbl %>%
 
 ## Total Appointments ----
 
-total_appointments_daily_tbl %>%
+gp_same_day_daily_tbl %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)
+    ) %>%
     plot_anomaly_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
-        .alpha = 0.1,
-        .interactive = T, 
-        .title = "Mutiple Low Daily Values - Explore Bank Holidays and Training Afternoons"
+        .alpha = 0.05,
+        .interactive = T,
+        .title = "Troughs for total apppointments when weeks that contain holiday "
     )
 
 total_appointments_daily_tbl %>%
@@ -189,7 +261,7 @@ gp_appointments_attended_daily_tbl %>%
         .date_var = appointment_date,
         .value = appointments,
         .alpha = 0.05,
-        .interactive = FALSE, 
+        .interactive = FALSE,
         .title = "Mutiple Low Daily Values - Explore Bank Holidays and Training Afternoons"
     )
 
@@ -223,7 +295,7 @@ gp_appointments_attended_daily_tbl %>%
 
 # Seasonal Decomposition ----
 
-# single time series 
+# single time series
 
 total_appointments_daily_tbl %>%
     summarise_by_time(
@@ -234,7 +306,7 @@ total_appointments_daily_tbl %>%
     plot_stl_diagnostics(appointment_date, appointments, .frequency = "7 days")
 
 gp_appointments_attended_daily_tbl %>%
-    ungroup() %>% 
+    ungroup() %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
@@ -246,7 +318,7 @@ gp_appointments_attended_daily_tbl %>%
 # grouped time series
 
 gp_appointments_attended_daily_tbl %>%
-    group_by(appt_mode) %>% 
+    group_by(appt_mode) %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -266,14 +338,15 @@ total_appointments_daily_tbl %>%
     ) %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ 
+        .formula = appointments ~
             week(appointment_date) +
             month(appointment_date, label = TRUE) +
             year(appointment_date),
-        .show_summary = TRUE)
+        .show_summary = TRUE
+    )
 
 gp_appointments_attended_daily_tbl %>%
-    ungroup() %>% 
+    ungroup() %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -281,35 +354,39 @@ gp_appointments_attended_daily_tbl %>%
     ) %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ 
+        .formula = appointments ~
             week(appointment_date) +
             month(appointment_date, label = TRUE) +
             year(appointment_date),
-        .show_summary = TRUE)
+        .show_summary = TRUE
+    )
 
 # Grouped Time Series
 gp_appointments_attended_daily_tbl %>%
-    group_by(appt_mode) %>% 
+    group_by(appt_mode) %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
-        appointments = sum(appointments)) %>%
+        appointments = sum(appointments)
+    ) %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ 
+        .formula = appointments ~
             as.numeric(appointment_date) +
             month(appointment_date, label = TRUE) +
             week(appointment_date) +
             year(appointment_date),
-        .show_summary = TRUE)
+        .show_summary = TRUE
+    )
 
 
 # FINDINGS ----
 
-## 1.  ----
-## 2.  ----
+## 1. Same Day appointments are the frequent type ----
+## 2. Bank Holidays result in lower total weekly appointments but daily rates may be high ----
 
 # TODO ----
 
-## * ----
-## * ----
+## * Explore Same Day appointments ----
+## * Create time series to handle bank holidays ----
+## * Use this to explore mean daily appointments by week ----

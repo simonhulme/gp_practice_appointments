@@ -13,7 +13,7 @@ wakefield_daily_raw <- read_rds("00_data/raw/wakefield_daily_raw.rds")
 
 ## Convert data to 5 day business week ----
 
-new_index <-
+five_day_index <-
     tk_make_weekday_sequence(
         start_date = min(wakefield_daily_raw$appointment_date),
         end_date = max(wakefield_daily_raw$appointment_date),
@@ -23,7 +23,7 @@ new_index <-
 
 wakefield_5_day_tbl <- 
     wakefield_daily_raw %>% 
-    filter(appointment_date %in% new_index)
+    filter(appointment_date %in% five_day_index)
 
 wakefield_5_day_tbl %>%
     summarise_by_time(
@@ -36,7 +36,7 @@ wakefield_5_day_tbl %>%
                      .interactive = FALSE,
                      .smooth_period = "12 months") +
     scale_x_date(
-        breaks = new_index,
+        breaks = five_day_index,
         date_breaks = "year",
         expand = c(0, 0),
         labels = year
@@ -166,11 +166,11 @@ wakefield_5_day_factorised_tbl %>%
 
 ### Prepare data for exploratory analysis ----
 
-wakefield_daily_prepared <- 
+wakefield_working_week_daily <- 
     wakefield_5_day_factorised_tbl %>%
     filter_by_time(.date_var = appointment_date, .start_date = "2019-03", .end_date = "2024")
 
-wakefield_daily_prepared %>%
+wakefield_working_week_daily %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
@@ -178,4 +178,4 @@ wakefield_daily_prepared %>%
     ) %>%
     plot_time_series(.date_var = appointment_date, appointments, .smooth_period = "12 months")
 
-write_rds(wakefield_daily_prepared, "00_data/processed/wakefield_daily_prepared.rds")
+write_rds(wakefield_working_week_daily, "00_data/processed/wakefield_working_week_daily.rds")

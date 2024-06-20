@@ -25,7 +25,7 @@ total_daily_appts <-
 
 total_daily_appts %>%
     plot_time_series(.date_var = appointment_date,
-                     .value = appointments)
+                     .value = appointments) 
 
 total_weekly_appts <- 
     wakefield_daily_raw %>% 
@@ -240,9 +240,9 @@ time_between_book_and_appt_monthly_appts %>%
 ## 2. historic data quality issues near start of time series ----
 ### * different time periods depending on feature ----
 
-## 3. Categorical data encoded as strings ----
+## 3. categorical data encoded as strings ----
 
-## 4. levels duplicated 
+## 4. levels duplicated ----
 ### * video / online appointment modes ----
 ### * unknown vs. data not provided ----
 ### • data quality vs. data issue

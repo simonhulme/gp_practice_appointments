@@ -204,12 +204,7 @@ gp_same_day_daily_tbl %>%
     ) +
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
 
-
 # Anomalies ----
-
-# Errors or events?
-
-## Total Appointments ----
 
 gp_same_day_daily_tbl %>%
     filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
@@ -226,78 +221,24 @@ gp_same_day_daily_tbl %>%
         .title = "Troughs for total apppointments when weeks that contain holiday "
     )
 
-total_appointments_daily_tbl %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.1,
-        .interactive = T,
-        .title = "Low Weekly Values - Explore Holidays and Effect of Pandemic "
-    )
-
-total_appointments_daily_tbl %>%
+gp_same_day_daily_tbl %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
         appointments = sum(appointments)
     ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.2,
-        .interactive = T,
-        .title = "Single low value - Impact of Pandemic "
-    )
-
-## GP Appointments attended ----
-
-gp_appointments_attended_daily_tbl %>%
     plot_anomaly_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
         .alpha = 0.05,
-        .interactive = FALSE,
-        .title = "Mutiple Low Daily Values - Explore Bank Holidays and Training Afternoons"
-    )
-
-gp_appointments_attended_daily_tbl %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.1,
-        .interactive = FALSE,
-        .title = "Low Weekly Values - Explore Holidays and Effect of Pandemic "
-    )
-
-gp_appointments_attended_daily_tbl %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.1,
-        .interactive = FALSE,
+        .interactive = T,
         .title = "Single low value - Impact of Pandemic "
     )
 
 # Seasonal Decomposition ----
 
-# single time series
-
-total_appointments_daily_tbl %>%
+gp_same_day_daily_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
@@ -305,32 +246,22 @@ total_appointments_daily_tbl %>%
     ) %>%
     plot_stl_diagnostics(appointment_date, appointments, .frequency = "7 days")
 
-gp_appointments_attended_daily_tbl %>%
-    ungroup() %>%
+# grouped time series
+
+gp_same_day_daily_tbl %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
+    group_by(appt_mode) %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
         appointments = sum(appointments)
     ) %>%
-    plot_stl_diagnostics(appointment_date, appointments, .frequency = "28 days")
-
-
-# grouped time series
-
-gp_appointments_attended_daily_tbl %>%
-    group_by(appt_mode) %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(appointments)
-    ) %>%
-    plot_stl_diagnostics(appointment_date, appointments, .frequency = "12 months")
+    plot_stl_diagnostics(appointment_date, appointments, .frequency = "7 days")
 
 
 # Time Series Regression Plot ----
 
-# Single Time Series
-total_appointments_daily_tbl %>%
+gp_same_day_daily_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -338,35 +269,20 @@ total_appointments_daily_tbl %>%
     ) %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~
+        .formula = appointments ~ 
+            as.numeric(appointment_date) +
             week(appointment_date) +
-            month(appointment_date, label = TRUE) +
-            year(appointment_date),
-        .show_summary = TRUE
-    )
-
-gp_appointments_attended_daily_tbl %>%
-    ungroup() %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(appointments)
-    ) %>%
-    plot_time_series_regression(
-        .date_var = appointment_date,
-        .formula = appointments ~
-            week(appointment_date) +
-            month(appointment_date, label = TRUE) +
-            year(appointment_date),
+            month(appointment_date, label = TRUE),
         .show_summary = TRUE
     )
 
 # Grouped Time Series
-gp_appointments_attended_daily_tbl %>%
+gp_same_day_daily_tbl %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
     group_by(appt_mode) %>%
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "month",
+        .by = "week",
         appointments = sum(appointments)
     ) %>%
     plot_time_series_regression(
@@ -374,8 +290,7 @@ gp_appointments_attended_daily_tbl %>%
         .formula = appointments ~
             as.numeric(appointment_date) +
             month(appointment_date, label = TRUE) +
-            week(appointment_date) +
-            year(appointment_date),
+            week(appointment_date),
         .show_summary = TRUE
     )
 
@@ -389,4 +304,4 @@ gp_appointments_attended_daily_tbl %>%
 
 ## * Explore Same Day appointments ----
 ## * Create time series to handle bank holidays ----
-## * Use this to explore mean daily appointments by week ----
+## * Model mean daily appointments by week ----

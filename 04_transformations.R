@@ -1,10 +1,12 @@
-# Wrangle data for improved models ----
+# Transformations for improved models ----
+
+
 
 
 library(tidyverse)
 library(timetk)
 
-all_appointments_daily_tbl <- read_rds("00_data/processed/wakefield_daily_prepared.rds")
+all_appointments_daily_tbl <- read_rds("00_data/processed/wakefield_working_week_daily.rds")
 
 ## Transformations and adjustments ----
 
@@ -345,3 +347,10 @@ all_appointments_daily_tbl %>%
                          .trend = "1 year",
                          .frequency = "1 week", 
                          .feature_set = c("observed", "season", "trend", "remainder"))
+
+
+## Explore other features from data ----
+
+# TODO
+
+

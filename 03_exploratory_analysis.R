@@ -1,13 +1,10 @@
 # Exploratory Data Analysis ----
 
 # Set Up
-
 library(tidyverse)
 library(timetk)
-# library(DataExplorer)
 
-wakefield_working_week_daily <-
-    read_rds("00_data/processed/wakefield_working_week_daily.rds")
+wakefield_working_week_daily <- read_rds("00_data/processed/wakefield_working_week_daily.rds")
 
 # Basic Analysis ----
 
@@ -94,6 +91,7 @@ wakefield_working_week_daily %>%
 gp_total_daily_tbl <-
     wakefield_working_week_daily %>%
     filter(hcp_type == "GP") %>%
+    mutate(count_of_appointments = replace_na(count_of_appointments, 0)) %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
@@ -105,7 +103,7 @@ gp_total_daily_tbl %>%
         .date_var = appointment_date,
         .by = "day",
         total_appointments = sum(appointments)
-    ) %>%
+    ) %>% 
     plot_time_series(.date_var = appointment_date,
                      .value = total_appointments,
                      .title = "Time Series Plot: All GP Appointments")
@@ -264,7 +262,7 @@ gp_same_day_daily_tbl %>%
 gp_same_day_daily_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "month",
+        .by = "day",
         appointments = sum(appointments)
     ) %>%
     plot_time_series_regression(
@@ -293,6 +291,12 @@ gp_same_day_daily_tbl %>%
             week(appointment_date),
         .show_summary = TRUE
     )
+
+# Moving Average Forecasting ----
+
+gp_same_day_daily_tbl
+
+
 
 
 # FINDINGS ----

@@ -1,30 +1,53 @@
 # DATA PREPARATION ----
 
-## Set Up ----
-
 # Load Libraries 
 
 library(tidyverse)
 library(timetk)
 
-# Import Data
-
+# Read the raw data
 wakefield_daily_raw <- read_rds("00_data/raw/wakefield_daily_raw.rds")
+
+# Generate all days in time series ----
+
+start_date <- min(wakefield_daily_raw$appointment_date)
+end_date   <- max(wakefield_daily_raw$appointment_date)
+
+all_days_wakefield_daily <- 
+    tibble(appointment_date = tk_make_timeseries(start_date = start_date, end_date = end_date))
+
+# Complete the dataset to fill gaps with zeroes
+
+wakefield_daily_expanded <- 
+    wakefield_daily_raw %>%
+    complete(appointment_date = all_days_wakefield_daily$appointment_date,
+             hcp_type,
+             appt_mode,
+             appt_status,
+             time_between_book_and_appt) %>%
+    replace_na(list(count_of_appointments = 0))
+
+# Display the filled dataset
+wakefield_daily_expanded %>% 
+    mutate(day = day(appointment_date)) %>% 
+    count(day) %>% view()
+
 
 ## Convert data to 5 day business week ----
 
 five_day_index <-
     tk_make_weekday_sequence(
-        start_date = min(wakefield_daily_raw$appointment_date),
-        end_date = max(wakefield_daily_raw$appointment_date),
+        start_date = start_date,
+        end_date = end_date,
         remove_weekends = TRUE,
         remove_holidays = FALSE
     )
 
-wakefield_5_day_tbl <- 
-    wakefield_daily_raw %>% 
-    filter(appointment_date %in% five_day_index)
+wakefield_5_day_tbl <-
+    wakefield_daily_expanded %>% 
+    filter(appointment_date %in% five_day_index) 
 
+    
 wakefield_5_day_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
@@ -33,14 +56,8 @@ wakefield_5_day_tbl %>%
     ) %>%
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
-                     .interactive = FALSE,
-                     .smooth_period = "12 months") +
-    scale_x_date(
-        breaks = five_day_index,
-        date_breaks = "year",
-        expand = c(0, 0),
-        labels = year
-    )
+                     .interactive = TRUE,
+                     .smooth_period = "12 months")
 
 ## Encode categorical variables as factors  ----
 

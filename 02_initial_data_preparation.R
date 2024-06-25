@@ -8,33 +8,35 @@ library(timetk)
 # Read the raw data
 wakefield_daily_raw <- read_rds("00_data/raw/wakefield_daily_raw.rds")
 
-# Generate all days in time series ----
+# Handle implicitly missing values ----
+
+## Generate series with no missing days ----
 
 start_date <- min(wakefield_daily_raw$appointment_date)
 end_date   <- max(wakefield_daily_raw$appointment_date)
 
-all_days_wakefield_daily <- 
-    tibble(appointment_date = tk_make_timeseries(start_date = start_date, end_date = end_date))
+all_days_wakefield_daily <- tk_make_timeseries(start_date = start_date, end_date = end_date)
 
-# Complete the dataset to fill gaps with zeroes
+## Expand dataset to contain all levels for all dates ----
 
 wakefield_daily_expanded <- 
     wakefield_daily_raw %>%
-    complete(appointment_date = all_days_wakefield_daily$appointment_date,
+    complete(appointment_date = all_days_wakefield_daily,
              hcp_type,
              appt_mode,
              appt_status,
              time_between_book_and_appt) %>%
     replace_na(list(count_of_appointments = 0))
 
-# Display the filled dataset
+## Check the expanded dataset ----
 wakefield_daily_expanded %>% 
     mutate(day = day(appointment_date)) %>% 
-    count(day) %>% view()
+    count(day) %>% 
+    view()
 
+# Convert data to 5 day working week ----
 
-## Convert data to 5 day business week ----
-
+## create index for working week ----
 five_day_index <-
     tk_make_weekday_sequence(
         start_date = start_date,
@@ -47,24 +49,12 @@ wakefield_5_day_tbl <-
     wakefield_daily_expanded %>% 
     filter(appointment_date %in% five_day_index) 
 
-    
-wakefield_5_day_tbl %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_time_series(.date_var = appointment_date,
-                     .value = appointments,
-                     .interactive = TRUE,
-                     .smooth_period = "12 months")
-
-## Encode categorical variables as factors  ----
+# Encode categorical variables as factors  ----
 
 ## collapse levels to handle duplication
-## re-order levels where order important
+## re-order where order relevant
 
-wakefield_5_day_factorised_tbl <-
+wakefield_5_day_factors_tbl <-
     wakefield_5_day_tbl  %>%
     mutate(across(where(is_character), as_factor)) %>% 
     mutate(
@@ -93,10 +83,10 @@ wakefield_5_day_factorised_tbl <-
     )
 
 
-## Slice Time Series to Exclude Missing Data ----
+# Subset Time Series to Exclude Missing Data ----
 
 wakefield_working_week_daily <- 
-    wakefield_5_day_factorised_tbl %>%
+    wakefield_5_day_factors_tbl %>%
     filter_by_time(.date_var = appointment_date, .start_date = "2019-03", .end_date = "2024")
 
 wakefield_working_week_daily %>%

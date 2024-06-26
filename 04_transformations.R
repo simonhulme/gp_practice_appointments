@@ -1,35 +1,25 @@
-# Transformations ----
+# Set Up ----
 
 library(tidyverse)
 library(timetk)
 
 wakefield_working_week_daily <- read_rds("00_data/processed/wakefield_working_week_daily.rds")
 
-## Calendar Adjustments ----
+# Calendar Adjustments ----
 
-## Holidays, Pandemic, Training Days
 ## Create Flags and adjust weekly values by using mean per day / session
 
-## apply to whole time series prior to creating more focused analysis sets 
+## Apply to whole time series prior to creating more focused analysis sets 
 
-### Start with Holidays
-
-### Add Holiday Sequence ----
+## Bank Holidays, Training Days, Pandemic  ----
 
 start_date <- min(wakefield_working_week_daily$appointment_date)
 end_date   <- max(wakefield_working_week_daily$appointment_date)
 
-
-holiday_sequence <-
+holiday_dates <-
     tk_make_holiday_sequence(start_date = start_date,
                              end_date = end_date,
                              calendar = "LONDON")
-
-wakefield_working_week_with_holidays_daily <- 
-    wakefield_working_week_daily %>%
-    mutate(holiday = as_factor(if_else(appointment_date %in% holiday_sequence, "Yes", "No")))
-
-### Add Training Afternoons ----
 
 training_dates_19 <- 
     c("2019-03-20", "2019-04-24", "2019-05-15", "2019-06-19",
@@ -65,215 +55,181 @@ training_dates <-
         training_dates_24
     ))
 
-wakefield_working_week_with_holidys_and_training_daily <- 
-    wakefield_working_week_with_holidays_daily %>% 
-    mutate(training = if_else(appointment_date %in% training_dates, "Yes", "No"))
+pandemic_dates <- 
+  tk_make_timeseries(start_date = "2020-03-23", end_date = "2021-07-19", by = "day")
 
-wakefield_working_week_with_holidys_and_training_daily
+wakefield_working_week_with_calendar_adjustments <- 
+  wakefield_working_week_daily %>%
+  mutate(holiday = as_factor(if_else(appointment_date %in% holiday_dates, "Yes", "No")),
+         training = if_else(appointment_date %in% training_dates, "Yes", "No"),
+         pandemic = as_factor(if_else(appointment_date %in% pandemic_dates, "Yes", "No")))
 
+## Check if new feature map observed data appropriately using a linear regression model
+
+## Focus on GP face to face same day appointments attended
+
+gp_f2f_same_day_attended <- 
+  wakefield_working_week_with_calendar_adjustments %>%
+    filter(hcp_type == "GP",
+           time_between_book_and_appt == "Same Day",
+           appt_mode == "Face-to-Face",
+           appt_status == "Attended") 
+
+gp_f2f_same_day_attended %>%
+  plot_time_series_regression(
+    .date_var = appointment_date,
+    .formula = count_of_appointments ~
+      as.numeric(appointment_date) +
+      wday(appointment_date, label = TRUE) +
+      week(appointment_date) +
+      month(appointment_date, label = TRUE) +
+      year(appointment_date) +
+      holiday +
+      training +
+      pandemic,
+    .show_summary = TRUE
+  )
+ 
+## Adjust weekly figure to mean appointments per session ----
+
+gp_f2f_same_day_attended_mean_weekly <-
+  wakefield_working_week_with_calendar_adjustments %>%
+  filter(
+    hcp_type == "GP",
+    time_between_book_and_appt == "Same Day",
+    appt_mode == "Face-to-Face",
+    appt_status == "Attended"
+  ) %>%
+  mutate(sessions = case_when(holiday == "Yes" ~ 0,
+                              training == "Yes" ~ 1,
+                              TRUE ~ 2)) %>%
+  mutate_by_time(
+    .date_var = appointment_date,
+    .by = "week",
+    sessions_per_week = sum(sessions)
+  ) %>%
+  summarise_by_time(
+    .date_var = appointment_date,
+    .by = "week",
+    mean_per_session = mean(sum(count_of_appointments) / sessions_per_week)
+  )
+
+gp_f2f_same_day_attended_mean_weekly %>%
+  plot_time_series(.date_var = appointment_date,
+                   .value = mean_per_session,
+                   .smooth = TRUE,
+                   .title = "GP f2f same day attended appts - adj for Bank Holidays and TARGET")
+  
 # PROGRESS UP TO HERE ----
 
+## Variance Reduction ----
 
-all_appointments_daily_tbl %>%
-    # filter(hcp_type == "GP", appt_mode == "Face-to-Face", appt_status == "Attended") %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
+gp_f2f_same_day_attended_weekly <- 
+    gp_f2f_same_day_attended %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "week",
-        mean_daily_appointments = sum(appointments)
-    ) %>% 
-    plot_time_series(.date_var = appointment_date, .value = mean_daily_appointments)
-
-### Population Adjustments ----
-
-# TODO:
-# Adjust for changes in population
-# With Workforce data could also adjust for staffing levels
-
-
-### Variance Reduction ----
-
-# Methods to handle outliers and heteroskedasticity 
-
-gp_appointments_weekly <- 
-    all_appointments_daily_tbl %>%
-    filter(hcp_type == "GP") %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(count_of_appointments)
+        count_of_appointments = sum(count_of_appointments)
     ) 
 
-gp_appointments_weekly %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments)
+gp_f2f_same_day_attended_weekly %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = count_of_appointments,
+                     .title = "GP f2f same day appointments attended weekly")
 
-# fit linear model to untransformed data
+### untransformed ----
 
 glm_fitted <- 
-    lm(appointments ~
-            as.numeric(appointment_date) +
-            month(appointment_date, label = TRUE) +
-            year(appointment_date),
-        data = gp_appointments_weekly)
+    lm(count_of_appointments ~
+           as.numeric(appointment_date) +
+           month(appointment_date, label = TRUE) +
+           year(appointment_date),
+        data = gp_f2f_same_day_attended_weekly)
 
 summary(glm_fitted)
 
 lmtest::bptest(
     glm_fitted,
-    data = gp_appointments_weekly
+    data = gp_f2f_same_day_attended_weekly
 )
 
-broom::augment(glm_fitted, gp_appointments_weekly) %>% 
-    select(appointment_date, appointments, .fitted) %>% 
-    mutate(.resid  = appointments - .fitted) %>% 
+broom::augment(glm_fitted, gp_f2f_same_day_attended_weekly) %>% 
+    select(appointment_date, count_of_appointments, .fitted) %>% 
+    mutate(.resid  = count_of_appointments - .fitted) %>% 
     ggplot(aes(.fitted, .resid)) +
     geom_point() +
     geom_smooth() +
     theme_bw()
 
-broom::augment(glm_fitted, gp_appointments_weekly) %>% 
-    select(appointment_date, appointments, .fitted) %>% 
-    mutate(.resid  = appointments - .fitted) %>% 
-    ggplot(aes(.resid)) +
-    geom_histogram(fill = "steelblue", color = "grey30") +
-    theme_bw()
-
-
-# repeat using log transformed response 
+### log transformed ----
 
 glm_log_fitted <- 
-    lm(log1p(appointments) ~
-            as.numeric(appointment_date) +
-            month(appointment_date, label = TRUE) +
-            year(appointment_date),
-        data = gp_appointments_weekly)
+    lm(log1p(count_of_appointments) ~
+           as.numeric(appointment_date) +
+           week(appointment_date) +
+           month(appointment_date, label = TRUE) +
+           year(appointment_date),
+       data = gp_f2f_same_day_attended_weekly)
 
 summary(glm_log_fitted)
 
 lmtest::bptest(
     glm_log_fitted,
-    data = gp_appointments_weekly
+    data = gp_f2f_same_day_attended_weekly
 )
 
-broom::augment(glm_log_fitted, gp_appointments_weekly) %>% 
-    select(appointment_date, appointments, .fitted) %>% 
+broom::augment(glm_log_fitted, gp_f2f_same_day_attended_weekly) %>% 
+    select(appointment_date, count_of_appointments, .fitted) %>% 
     mutate(.fitted = exp(.fitted),
-           .resid  = appointments - .fitted) %>% 
+           .resid  = count_of_appointments - .fitted) %>% 
     ggplot(aes(.fitted, .resid)) +
     geom_point() +
     geom_smooth() +
     theme_bw()
 
-broom::augment(glm_log_fitted, gp_appointments_weekly) %>% 
-    select(appointment_date, appointments, .fitted) %>% 
-    mutate(.fitted = exp(.fitted),
-           .resid  = appointments - .fitted) %>% 
-    ggplot(aes(.resid)) +
-    geom_histogram(fill = "steelblue", color = "grey30") +
-    theme_bw()
-
-# repeat using box cox transformed response 
+###  box cox transformed ---- 
 
 glm_boxcox_fitted <- 
-    lm(box_cox_vec(appointments, lambda = "auto") ~
+    lm(box_cox_vec(count_of_appointments, lambda = "auto") ~
            as.numeric(appointment_date) +
            month(appointment_date, label = TRUE) +
            factor(year(appointment_date)),
-       data = gp_appointments_weekly)
+       data = gp_f2f_same_day_attended_weekly)
 
 summary(glm_boxcox_fitted)
 
 lmtest::bptest(
     glm_boxcox_fitted,
-    data = gp_appointments_weekly
+    data = gp_f2f_same_day_attended_weekly
 )
 
-broom::augment(glm_boxcox_fitted, gp_appointments_weekly) %>% 
-    select(appointment_date, appointments, .fitted) %>% 
-    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 1.99992424816297),
-           .resid  = appointments - .fitted) %>% 
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_weekly) %>% 
+    select(appointment_date, count_of_appointments, .fitted) %>% 
+    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.358388489030188),
+           .resid  = count_of_appointments - .fitted) %>% 
     ggplot(aes(.fitted, .resid)) +
     geom_point() +
     geom_smooth() +
     theme_bw()
 
-broom::augment(glm_boxcox_fitted, gp_appointments_weekly) %>% 
-    select(appointment_date, appointments, .fitted) %>% 
-    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 1.99992424816297),
-           .resid  = appointments - .fitted) %>% 
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_weekly) %>% 
+    select(appointment_date, count_of_appointments, .fitted) %>% 
+    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.358388489030188),
+           .resid  = count_of_appointments - .fitted) %>% 
     ggplot(aes(.resid)) +
     geom_histogram(fill = "steelblue", color = "grey30") +
     theme_bw()
 
-broom::augment(glm_boxcox_fitted, gp_appointments_weekly) %>% 
-    select(appointment_date, appointments, .fitted) %>% 
-    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 1.99992424816297)) %>% 
-    pivot_longer(cols = -appointment_date) %>% 
-    ggplot(aes(appointment_date, value, color = name)) +
-    geom_line() +
-    theme_bw()
 
+# Population ----
 
+# TODO:
+# Adjust for changes in population
 
+# Workforce ----
 
-## may be better manually modelling this using glm and poisson regression
-
-## practice forecasting
-
-model_fit_glm <- 
-    glm(appointments ~
-           wday(appointment_date, label = TRUE) +
-           month(appointment_date, label = TRUE) + 
-           year(appointment_date) * holiday, 
-       data = daily_appts_with_holidays, family = "poisson")
-
-future_tbl <-
-    daily_appts_with_holidays %>%
-    future_frame(.date_var = appointment_date, .length_out = "12 months") %>%
-    filter(appointment_date %in%
-               tk_make_weekday_sequence(
-                   start_date = min(appointment_date),
-                   end_date   = max(appointment_date)
-               )) %>%
-    mutate(
-        holiday = if_else(
-            appointment_date %in%
-                tk_make_holiday_sequence(
-                    start_date = min(appointment_date),
-                    end_date = max(appointment_date),
-                    calendar = "LONDON"
-                ),
-            "Yes",
-            "No"
-        ),
-        holiday = as_factor(holiday)
-    ) 
-
-predictions_vec <- 
-    predict(model_fit_glm, future_tbl) %>% 
-    exp() %>% 
-    unname()
-
-daily_appts_with_holidays %>%
-    select(appointment_date, appointments) %>%
-    add_column(type = "actual") %>%
-    bind_rows(future_tbl %>%
-                  mutate(appointments = predictions_vec,
-                         type = "predicted")) %>%
-    filter_by_time(.date_var = appointment_date, .start_date = "2023-04-01") %>%
-    plot_time_series(
-        .date_var = appointment_date,
-        .value = appointments,
-        .color_var = type,
-        .smooth = FALSE
-    )
-
-# Add Custom Training Half-Day Sequence (TARGET) ----
-
+# TODO
+# Adjust for staffing levels
 
 
 

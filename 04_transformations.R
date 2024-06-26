@@ -124,38 +124,25 @@ gp_f2f_same_day_attended_mean_weekly %>%
 
 ## Variance Reduction ----
 
-gp_f2f_same_day_attended_weekly <- 
-    gp_f2f_same_day_attended %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        count_of_appointments = sum(count_of_appointments)
-    ) 
-
-gp_f2f_same_day_attended_weekly %>%
-    plot_time_series(.date_var = appointment_date,
-                     .value = count_of_appointments,
-                     .title = "GP f2f same day appointments attended weekly")
-
 ### untransformed ----
 
 glm_fitted <- 
-    lm(count_of_appointments ~
+    lm(mean_per_session ~
            as.numeric(appointment_date) +
            month(appointment_date, label = TRUE) +
            year(appointment_date),
-        data = gp_f2f_same_day_attended_weekly)
+        data = gp_f2f_same_day_attended_mean_weekly)
 
 summary(glm_fitted)
 
 lmtest::bptest(
     glm_fitted,
-    data = gp_f2f_same_day_attended_weekly
+    data = gp_f2f_same_day_attended_mean_weekly
 )
 
-broom::augment(glm_fitted, gp_f2f_same_day_attended_weekly) %>% 
-    select(appointment_date, count_of_appointments, .fitted) %>% 
-    mutate(.resid  = count_of_appointments - .fitted) %>% 
+broom::augment(glm_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
+    select(appointment_date, mean_per_session, .fitted) %>% 
+    mutate(.resid  = mean_per_session - .fitted) %>% 
     ggplot(aes(.fitted, .resid)) +
     geom_point() +
     geom_smooth() +
@@ -164,24 +151,24 @@ broom::augment(glm_fitted, gp_f2f_same_day_attended_weekly) %>%
 ### log transformed ----
 
 glm_log_fitted <- 
-    lm(log1p(count_of_appointments) ~
+    lm(log1p(mean_per_session) ~
            as.numeric(appointment_date) +
            week(appointment_date) +
            month(appointment_date, label = TRUE) +
            year(appointment_date),
-       data = gp_f2f_same_day_attended_weekly)
+       data = gp_f2f_same_day_attended_mean_weekly)
 
 summary(glm_log_fitted)
 
 lmtest::bptest(
     glm_log_fitted,
-    data = gp_f2f_same_day_attended_weekly
+    data = gp_f2f_same_day_attended_mean_weekly
 )
 
-broom::augment(glm_log_fitted, gp_f2f_same_day_attended_weekly) %>% 
-    select(appointment_date, count_of_appointments, .fitted) %>% 
+broom::augment(glm_log_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
+    select(appointment_date, mean_per_session, .fitted) %>% 
     mutate(.fitted = exp(.fitted),
-           .resid  = count_of_appointments - .fitted) %>% 
+           .resid  = mean_per_session - .fitted) %>% 
     ggplot(aes(.fitted, .resid)) +
     geom_point() +
     geom_smooth() +
@@ -190,32 +177,32 @@ broom::augment(glm_log_fitted, gp_f2f_same_day_attended_weekly) %>%
 ###  box cox transformed ---- 
 
 glm_boxcox_fitted <- 
-    lm(box_cox_vec(count_of_appointments, lambda = "auto") ~
+    lm(box_cox_vec(mean_per_session, lambda = "auto") ~
            as.numeric(appointment_date) +
            month(appointment_date, label = TRUE) +
            factor(year(appointment_date)),
-       data = gp_f2f_same_day_attended_weekly)
+       data = gp_f2f_same_day_attended_mean_weekly)
 
 summary(glm_boxcox_fitted)
 
 lmtest::bptest(
     glm_boxcox_fitted,
-    data = gp_f2f_same_day_attended_weekly
+    data = gp_f2f_same_day_attended_mean_weekly
 )
 
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_weekly) %>% 
-    select(appointment_date, count_of_appointments, .fitted) %>% 
-    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.358388489030188),
-           .resid  = count_of_appointments - .fitted) %>% 
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
+    select(appointment_date, mean_per_session, .fitted) %>% 
+    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768),
+           .resid  = mean_per_session - .fitted) %>% 
     ggplot(aes(.fitted, .resid)) +
     geom_point() +
     geom_smooth() +
     theme_bw()
 
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_weekly) %>% 
-    select(appointment_date, count_of_appointments, .fitted) %>% 
-    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.358388489030188),
-           .resid  = count_of_appointments - .fitted) %>% 
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
+  select(appointment_date, mean_per_session, .fitted) %>% 
+  mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768),
+         .resid  = mean_per_session - .fitted) %>% 
     ggplot(aes(.resid)) +
     geom_histogram(fill = "steelblue", color = "grey30") +
     theme_bw()

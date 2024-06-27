@@ -4,6 +4,7 @@ library(tidyverse)
 library(timetk)
 
 wakefield_working_week_daily <- read_rds("00_data/processed/wakefield_working_week_daily.rds")
+wakefield_population_monthly <- read_rds("00_data/processed/wakefield_population_monthly.rds")
 
 # Calendar Adjustments ----
 
@@ -233,6 +234,36 @@ broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
 
 # TODO:
 # Adjust for changes in population
+
+wakefield_population_daily <- 
+  tk_make_timeseries(start_date = "2019-05-01", end_date = "2024-05-01") %>% 
+  as_tibble_col(column_name = "appointment_date") %>% 
+  left_join(wakefield_population_monthly, by = c("appointment_date" = "extract_date")) %>% 
+  fill(registered_population)
+
+gp_f2f_same_day_attended_population <- 
+  wakefield_population_daily %>% 
+  inner_join(gp_f2f_same_day_attended) %>% 
+  select(appointment_date, population = registered_population, appointments = count_of_appointments,
+         holiday, training, pandemic)
+
+## explore regression model 
+
+gp_f2f_same_day_attended_population %>%
+  plot_time_series_regression(
+    .date_var = appointment_date,
+    .formula = appointments ~
+      wday(appointment_date, label = TRUE) +
+      month(appointment_date, label = TRUE) +
+      holiday +
+      training +
+      pandemic +
+      population,
+    .show_summary = TRUE
+  )
+
+
+
 
 # Workforce ----
 

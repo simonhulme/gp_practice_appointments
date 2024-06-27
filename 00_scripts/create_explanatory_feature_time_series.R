@@ -78,65 +78,60 @@ download.file("https://files.digital.nhs.uk/32/6E1670/GPWFPracticeCSVpt2.072022.
 
 contents <- 
   unzip(temporary_file, list = TRUE) %>% 
-  pull(Name)
+  pull(Name) %>% 
+  str_subset(".csv")
 
-### September 2020 ----
-
-september_2020 <- 
-  read_csv(unz(temporary_file, contents[[3]]))
-
-df_september_2020 <- 
-  september_2020 %>% 
-  filter(SUB_ICB_CODE == "03R") %>% 
-  select(PRAC_CODE, PRAC_NAME, TOTAL_GP_FTE, TOTAL_NURSES_FTE, TOTAL_DPC_FTE, TOTAL_ADMIN_FTE) %>% 
-  mutate(extract_date = as.Date("2020-09-30"), .before = PRAC_CODE) %>% 
-  mutate(across(where(is.character), ~ na_if(.x, "ND"))) %>% 
-  mutate(across(contains("TOTAL"), as.numeric))
+dates <- 
+  contents %>% 
+  str_remove("^[:digit:]+.") %>% 
+  str_remove("( General Practice )") %>% 
+  str_remove("[:punct:] ") %>% 
+  str_remove(" Practice [L|l]evel.csv") 
   
-### December 2020 ----
+workforce_data <- tibble(
+  extract_date = dates,
+  file = contents
+  ) 
 
-december_2020 <- 
-  read_csv(unz(temporary_file, contents[[4]]))
+workforce_data <-
+  workforce_data %>%
+  mutate(
+    data = map(file, ~ read_csv(unz(temporary_file, .x))),
+    data = map(data, ~ filter(.x, SUB_ICB_CODE == "03R")))
 
-df_december_2020 <- 
-  december_2020 %>% 
-  filter(SUB_ICB_CODE == "03R") %>% 
-  select(PRAC_CODE, PRAC_NAME, TOTAL_GP_FTE, TOTAL_NURSES_FTE, TOTAL_DPC_FTE, TOTAL_ADMIN_FTE) %>% 
-  mutate(extract_date = as.Date("2020-12-31"), .before = PRAC_CODE) %>% 
-  mutate(across(where(is.character), ~ na_if(.x, "ND"))) %>% 
-  mutate(across(contains("TOTAL"), as.numeric))
-
-### March 2021 ----
-
-march_2021 <- 
-  read_csv(unz(temporary_file, contents[[5]]))
-
-df_march_2021 <- 
-  march_2021 %>% 
-  filter(SUB_ICB_CODE == "03R") %>% 
-  select(PRAC_CODE, PRAC_NAME, TOTAL_GP_FTE, TOTAL_NURSES_FTE, TOTAL_DPC_FTE, TOTAL_ADMIN_FTE) %>% 
-  mutate(extract_date = as.Date("2020-12-31"), .before = PRAC_CODE) %>% 
-  mutate(across(where(is.character), ~ na_if(.x, "ND"))) %>% 
-  mutate(across(contains("TOTAL"), as.numeric))
-
-
-data <- 
-  map(contents, ~ read_csv(unz(temporary_file, .x))) 
-
-data <- 
+process_workforce_data <- function(data) {
+  
   data %>% 
-  map(~ filter(.x, SUB_ICB_CODE == "03R"))
+    select(PRAC_CODE, TOTAL_GP_FTE, TOTAL_NURSES_FTE, TOTAL_DPC_FTE) %>% 
+    mutate(across(where(is.character), ~ na_if(.x, "ND"))) %>% 
+    mutate(across(contains("TOTAL"), as.numeric))
+}
 
 workforce <- 
-  data[[1]] %>%
-  select("TOTAL_GP_FTE", "TOTAL_NURSES_FTE", "TOTAL_DPC_FTE", "TOTAL_ADMIN_FTE") %>% 
-  mutate(across(everything(), as.numeric)) %>% 
-  colSums() %>% 
-  round(2)
+  workforce_data %>% 
+  mutate(data = map(data, process_workforce_data)) %>% 
+  unnest(data) %>% 
+  select(-file) %>% 
+  mutate(extract_date = dmy(paste0("01 ", extract_date))) %>% 
+  replace_na(list(TOTAL_GP_FTE = 0, TOTAL_NURSES_FTE = 0, TOTAL_DPC_FTE = 0)) %>% 
+  group_by(extract_date) %>% 
+  summarise(
+    total_gp = sum(TOTAL_GP_FTE) %>% round(2),
+    total_nurse = sum(TOTAL_NURSES_FTE) %>% round(2),
+    total_dpc = sum(TOTAL_DPC_FTE) %>% round(2)
+  )
+  
+workforce %>% 
+  mutate(other_practice_staff = total_nurse + total_dpc) %>% 
+  select(-total_nurse, -total_dpc) %>% 
+  pivot_longer(cols = -extract_date) %>% 
+  ggplot(aes(extract_date, value, color = name)) +
+  geom_line() +
+  theme_bw()
+  
 
-
-
-
+# TODO
+## Add monthly data sets ----
 
 workforce_url <- 
   "https://digital.nhs.uk/data-and-information/publications/statistical/general-and-personal-medical-services/"
@@ -144,7 +139,7 @@ workforce_url <-
 ## create sequence of dates representing last day of each month 
 
 dates <- 
-  tk_make_timeseries(start_date = "2022-01", end_date = "2024-05", by = "month")
+  tk_make_timeseries(start_date = "2022-08", end_date = "2024-05", by = "month")
 
 dates_urls <- format.Date(dates, "%d-%B-%Y") %>% map(str_to_lower)
 
@@ -191,7 +186,6 @@ urls <- map(map(data_urls, extract_individual_urls), ~ str_subset(.x, "GPWPracti
 
 urls
 
-dates_urls[[7]]
 
 
 

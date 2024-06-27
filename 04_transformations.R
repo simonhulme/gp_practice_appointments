@@ -159,12 +159,6 @@ gp_f2f_same_day_attended_population %>%
 # TODO
 # Adjust for staffing levels
 
-
-
-
-
-
-
 ## Variance Reduction ----
 
 ### untransformed ----

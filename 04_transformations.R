@@ -123,72 +123,114 @@ gp_f2f_same_day_attended_mean_weekly %>%
   
 # PROGRESS UP TO HERE ----
 
+
+
+# Add Population ----
+
+wakefield_population_daily <- 
+  tk_make_timeseries(start_date = "2019-05-01", end_date = "2024-05-01") %>% 
+  as_tibble_col(column_name = "appointment_date") %>% 
+  left_join(wakefield_population_monthly, by = c("appointment_date" = "extract_date")) %>% 
+  fill(registered_population)
+
+gp_f2f_same_day_attended_population <- 
+  wakefield_population_daily %>% 
+  inner_join(gp_f2f_same_day_attended) %>% 
+  select(appointment_date, population = registered_population, appointments = count_of_appointments,
+         holiday, training, pandemic)
+
+## explore using regression model 
+
+gp_f2f_same_day_attended_population %>%
+  plot_time_series_regression(
+    .date_var = appointment_date,
+    .formula = appointments ~
+      wday(appointment_date, label = TRUE) +
+      month(appointment_date, label = TRUE) +
+      holiday +
+      training +
+      pandemic +
+      population,
+    .show_summary = TRUE
+  )
+
+# Workforce ----
+
+# TODO
+# Adjust for staffing levels
+
+
+
+
+
+
+
 ## Variance Reduction ----
 
 ### untransformed ----
 
 glm_fitted <- 
-    lm(mean_per_session ~
-           as.numeric(appointment_date) +
-           month(appointment_date, label = TRUE) +
-           year(appointment_date),
-        data = gp_f2f_same_day_attended_mean_weekly)
+  lm(mean_per_session ~
+       as.numeric(appointment_date) +
+       month(appointment_date, label = TRUE) +
+       year(appointment_date),
+     data = gp_f2f_same_day_attended_mean_weekly)
 
 summary(glm_fitted)
 
 lmtest::bptest(
-    glm_fitted,
-    data = gp_f2f_same_day_attended_mean_weekly
+  glm_fitted,
+  data = gp_f2f_same_day_attended_mean_weekly
 )
 
 broom::augment(glm_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
-    select(appointment_date, mean_per_session, .fitted) %>% 
-    mutate(.resid  = mean_per_session - .fitted) %>% 
-    ggplot(aes(.fitted, .resid)) +
-    geom_point() +
-    geom_smooth() +
-    theme_bw()
+  select(appointment_date, mean_per_session, .fitted) %>% 
+  mutate(.resid  = mean_per_session - .fitted) %>% 
+  ggplot(aes(.fitted, .resid)) +
+  geom_point() +
+  geom_smooth() +
+  theme_bw()
 
 ### log transformed ----
 
 glm_log_fitted <- 
-    lm(log1p(mean_per_session) ~
-           as.numeric(appointment_date) +
-           week(appointment_date) +
-           month(appointment_date, label = TRUE) +
-           year(appointment_date),
-       data = gp_f2f_same_day_attended_mean_weekly)
+  lm(log1p(mean_per_session) ~
+       as.numeric(appointment_date) +
+       week(appointment_date) +
+       month(appointment_date, label = TRUE) +
+       year(appointment_date),
+     data = gp_f2f_same_day_attended_mean_weekly)
 
 summary(glm_log_fitted)
 
 lmtest::bptest(
-    glm_log_fitted,
-    data = gp_f2f_same_day_attended_mean_weekly
+  glm_log_fitted,
+  data = gp_f2f_same_day_attended_mean_weekly
 )
 
 broom::augment(glm_log_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
-    select(appointment_date, mean_per_session, .fitted) %>% 
-    mutate(.fitted = exp(.fitted),
-           .resid  = mean_per_session - .fitted) %>% 
-    ggplot(aes(.fitted, .resid)) +
-    geom_point() +
-    geom_smooth() +
-    theme_bw()
+  select(appointment_date, mean_per_session, .fitted) %>% 
+  mutate(.fitted = exp(.fitted),
+         .resid  = mean_per_session - .fitted) %>% 
+  ggplot(aes(.fitted, .resid)) +
+  geom_point() +
+  geom_smooth() +
+  theme_bw()
 
 ###  box cox transformed ---- 
 
 glm_boxcox_fitted <- 
-    lm(box_cox_vec(mean_per_session, lambda = "auto") ~
-           as.numeric(appointment_date) +
-           month(appointment_date, label = TRUE) +
-           factor(year(appointment_date)),
-       data = gp_f2f_same_day_attended_mean_weekly)
+  lm(box_cox_vec(mean_per_session, lambda = "auto") ~
+       as.numeric(appointment_date) +
+       month(appointment_date, label = TRUE) +
+       factor(year(appointment_date)),
+     data = gp_f2f_same_day_attended_mean_weekly)
 
 summary(glm_boxcox_fitted)
 
 lmtest::bptest(
-    glm_boxcox_fitted,
-    data = gp_f2f_same_day_attended_mean_weekly
+  glm_boxcox_fitted,
+  data = gp_f2f_same_day_attended_mean_weekly
 )
 
 broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
@@ -228,49 +270,6 @@ broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
   ggplot(aes(.resid)) +
   geom_histogram(fill = "steelblue", color = "grey30") +
   theme_bw()
-
-
-# Population ----
-
-# TODO:
-# Adjust for changes in population
-
-wakefield_population_daily <- 
-  tk_make_timeseries(start_date = "2019-05-01", end_date = "2024-05-01") %>% 
-  as_tibble_col(column_name = "appointment_date") %>% 
-  left_join(wakefield_population_monthly, by = c("appointment_date" = "extract_date")) %>% 
-  fill(registered_population)
-
-gp_f2f_same_day_attended_population <- 
-  wakefield_population_daily %>% 
-  inner_join(gp_f2f_same_day_attended) %>% 
-  select(appointment_date, population = registered_population, appointments = count_of_appointments,
-         holiday, training, pandemic)
-
-## explore regression model 
-
-gp_f2f_same_day_attended_population %>%
-  plot_time_series_regression(
-    .date_var = appointment_date,
-    .formula = appointments ~
-      wday(appointment_date, label = TRUE) +
-      month(appointment_date, label = TRUE) +
-      holiday +
-      training +
-      pandemic +
-      population,
-    .show_summary = TRUE
-  )
-
-
-
-
-# Workforce ----
-
-# TODO
-# Adjust for staffing levels
-
-
 
 # Moving averages and smoothing transformation ----
 

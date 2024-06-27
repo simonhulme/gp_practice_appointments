@@ -1,24 +1,23 @@
-# Create time series for potential explanatory features ----
+# Create time series for potential explanatory features 
 
 library(tidyverse)
 library(rvest)
 library(timetk)
 
 # Population
+# Workforce
 # On-line Consultations
 # Telephone Consultation
 
-## Population of chosen area ----
+# Population ----
 
 ## Available monthly with files accessed from different web pages 
 ## Web pages have same base url but each ends with different month and year
 
-## Construct vector of urls for target dates 
-
-base_url <- 
+population_url <- 
     "https://digital.nhs.uk/data-and-information/publications/statistical/patients-registered-at-a-gp-practice/"
 
-### Create sequence of dates and transform into web address format
+dates <- seq.Date(from = as.Date("2019-05-01"), to = as.Date("2024-05-01"), by = "month")
 
 convert_date <- function(date) {
     
@@ -30,17 +29,13 @@ convert_date <- function(date) {
     return(output)
 }
 
-dates <- seq.Date(from = as.Date("2019-05-01"), to = as.Date("2024-05-01"), by = "month")
+dates_url <- map_chr(dates, convert_date)
 
-append_dates_url <- map_chr(dates, convert_date)
-
-### Create vector of full url (base + date)
-
-full_url <- paste0(base_url, append_dates_url)
+full_url <- paste0(population_url, dates_url)
 
 ## Extract address for data from each webpage 
 
-get_urls_for_registered_populations <- function(url) {
+get_urls_for_data <- function(url) {
     
     html_obj <- read_html(url)
     
@@ -52,70 +47,173 @@ get_urls_for_registered_populations <- function(url) {
     return(data_url)
 }
 
-urls <- map(full_url, get_urls_for_registered_populations)
+data_urls <- map(full_url, get_urls_for_registered_populations)
 
-csv_urls <- urls[str_detect(urls, "csv")]
+csv_urls <- urls[str_detect(data_urls, "csv")]
 
 ## download data using urls 
 
-registered_population <- 
-    map(csv_urls, read_csv) %>% 
-    map(~ .x %>% mutate(EXTRACT_DATE = dmy(EXTRACT_DATE))) %>% 
-    reduce(bind_rows) %>%
-    janitor::clean_names() %>% 
-    filter(sub_icb_location_code == "03R" | ccg_code == "03R") %>%
-    summarise_by_time(.date_var = extract_date, .by = "month", registered_population = sum(number_of_patients))
+registered_population <-
+  map(csv_urls, read_csv) %>%
+  map( ~ .x %>% mutate(EXTRACT_DATE = dmy(EXTRACT_DATE))) %>%
+  reduce(bind_rows) %>%
+  janitor::clean_names() %>%
+  filter(sub_icb_location_code == "03R" | ccg_code == "03R") %>%
+  summarise_by_time(
+    .date_var = extract_date,
+    .by = "month",
+    registered_population = sum(number_of_patients)
+  )
 
 ## save data
 write_rds(registered_population, "00_data/processed/wakefield_population_monthly.rds")
 
+# Workforce ----
 
-## Extract Monthly GP Workforce Data for chosen area (Wakefield) ----
+## data from September 2020 to July 2022 ----
 
-base_url <- "https://digital.nhs.uk/data-and-information/publications/statistical/general-and-personal-medical-services/"
+temporary_file <- tempfile()
+
+download.file("https://files.digital.nhs.uk/32/6E1670/GPWFPracticeCSVpt2.072022.zip", temporary_file)
+
+contents <- 
+  unzip(temporary_file, list = TRUE) %>% 
+  pull(Name)
+
+### September 2020 ----
+
+september_2020 <- 
+  read_csv(unz(temporary_file, contents[[3]]))
+
+df_september_2020 <- 
+  september_2020 %>% 
+  filter(SUB_ICB_CODE == "03R") %>% 
+  select(PRAC_CODE, PRAC_NAME, TOTAL_GP_FTE, TOTAL_NURSES_FTE, TOTAL_DPC_FTE, TOTAL_ADMIN_FTE) %>% 
+  mutate(extract_date = as.Date("2020-09-30"), .before = PRAC_CODE) %>% 
+  mutate(across(where(is.character), ~ na_if(.x, "ND"))) %>% 
+  mutate(across(contains("TOTAL"), as.numeric))
+  
+### December 2020 ----
+
+december_2020 <- 
+  read_csv(unz(temporary_file, contents[[4]]))
+
+df_december_2020 <- 
+  december_2020 %>% 
+  filter(SUB_ICB_CODE == "03R") %>% 
+  select(PRAC_CODE, PRAC_NAME, TOTAL_GP_FTE, TOTAL_NURSES_FTE, TOTAL_DPC_FTE, TOTAL_ADMIN_FTE) %>% 
+  mutate(extract_date = as.Date("2020-12-31"), .before = PRAC_CODE) %>% 
+  mutate(across(where(is.character), ~ na_if(.x, "ND"))) %>% 
+  mutate(across(contains("TOTAL"), as.numeric))
+
+### March 2021 ----
+
+march_2021 <- 
+  read_csv(unz(temporary_file, contents[[5]]))
+
+df_march_2021 <- 
+  march_2021 %>% 
+  filter(SUB_ICB_CODE == "03R") %>% 
+  select(PRAC_CODE, PRAC_NAME, TOTAL_GP_FTE, TOTAL_NURSES_FTE, TOTAL_DPC_FTE, TOTAL_ADMIN_FTE) %>% 
+  mutate(extract_date = as.Date("2020-12-31"), .before = PRAC_CODE) %>% 
+  mutate(across(where(is.character), ~ na_if(.x, "ND"))) %>% 
+  mutate(across(contains("TOTAL"), as.numeric))
+
+
+data <- 
+  map(contents, ~ read_csv(unz(temporary_file, .x))) 
+
+data <- 
+  data %>% 
+  map(~ filter(.x, SUB_ICB_CODE == "03R"))
+
+workforce <- 
+  data[[1]] %>%
+  select("TOTAL_GP_FTE", "TOTAL_NURSES_FTE", "TOTAL_DPC_FTE", "TOTAL_ADMIN_FTE") %>% 
+  mutate(across(everything(), as.numeric)) %>% 
+  colSums() %>% 
+  round(2)
+
+
+
+
+
+workforce_url <- 
+  "https://digital.nhs.uk/data-and-information/publications/statistical/general-and-personal-medical-services/"
 
 ## create sequence of dates representing last day of each month 
 
 dates <- 
-    seq.Date(from = as.Date("2019-05-01"), to = as.Date("2024-05-01"), by = "month") %>% 
-    ceiling_date() - days(1)
-    
-dates_formatted <- format.Date(dates, "%d-%B-%Y")
+  tk_make_timeseries(start_date = "2022-01", end_date = "2024-05", by = "month")
 
+dates_urls <- format.Date(dates, "%d-%B-%Y") %>% map(str_to_lower)
 
-### Create vector of full url (base + date)
+full_urls <- paste0(workforce_url, dates_urls)
 
-full_url <- paste0(base_url, dates_formatted)
+# scrape urls for data sets
 
-full_url
+## get all urls as a list
 
-
-
-
-
-
-
-
-
-
-
-## TODO ----
-
-get_gp_data_daily <- function(url) {
-    
-    temporary_file <- tempfile()
-    
-    download.file(url, temporary_file)
-    
-    contents <- 
-        unzip(temporary_file, list = TRUE) %>% 
-        pull(Name)
-    
-    data <- 
-        map(contents, ~ read_csv(unz(temporary_file, .x)))
-    
-    return(data)
+get_urls_for_data <- function(url) {
+  html_obj <- read_html(url)
+  
+  data_url <-
+    html_elements(html_obj, "body") %>%
+    html_elements("#resources > div > div")
+  
+  return(data_url)
+  
 }
+
+data_urls <- map(full_urls, get_urls_for_data)
+
+extract_individual_urls <- function(data_urls) {
+  
+  total_urls = length(data_urls)
+  
+  url_list = list()
+  
+  for (url in 1:total_urls) {
+    
+    url <-  data_urls %>% 
+      pluck(url) %>% 
+      html_element("div > a") %>% 
+      html_attr("href")
+    
+    url_list = c(url_list, url)
+    
+  }
+  
+  url_list
+}
+
+urls <- map(map(data_urls, extract_individual_urls), ~ str_subset(.x, "GPWPracticeCSV"))
+
+urls
+
+dates_urls[[7]]
+
+
+
+
+
+## TODO
+
+# get_gp_data_daily <- function(url) {
+#     
+#     temporary_file <- tempfile()
+#     
+#     download.file(url, temporary_file)
+#     
+#     contents <- 
+#         unzip(temporary_file, list = TRUE) %>% 
+#         pull(Name)
+#     
+#     data <- 
+#         map(contents, ~ read_csv(unz(temporary_file, .x)))
+#     
+#     return(data)
+# }
 
 url <-
     c(
@@ -141,7 +239,7 @@ df <-
 
 df
 
-# Patients Registered by Area----
+# Patients Registered by Area
 
 df <- get_gp_data_daily(url = "https://files.digital.nhs.uk/C1/9B13E8/gp-reg-pat-prac-all.zip") %>% pluck(1)
 

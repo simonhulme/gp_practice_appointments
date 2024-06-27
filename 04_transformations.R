@@ -190,22 +190,43 @@ lmtest::bptest(
     data = gp_f2f_same_day_attended_mean_weekly
 )
 
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
-    select(appointment_date, mean_per_session, .fitted) %>% 
-    mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768),
-           .resid  = mean_per_session - .fitted) %>% 
-    ggplot(aes(.fitted, .resid)) +
-    geom_point() +
-    geom_smooth() +
-    theme_bw()
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
+  select(appointment_date, mean_per_session, .fitted) %>%
+  mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768)) %>%
+  ggplot(aes(.fitted, mean_per_session)) +
+  geom_point() +
+  geom_abline() +
+  expand_limits(x = 250, y = 250) +
+  theme_bw()
 
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
-  select(appointment_date, mean_per_session, .fitted) %>% 
+
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
+  select(appointment_date, mean_per_session, fitted = .fitted) %>%
+  mutate(fitted = box_cox_inv_vec(fitted, lambda = 0.629257000156768)) %>%
+  pivot_longer(-appointment_date) %>%
+  plot_time_series(
+    .date_var = appointment_date,
+    .value = value,
+    .color_var = name,
+    .smooth = FALSE
+  )
+
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
+  select(appointment_date, mean_per_session, .fitted) %>%
   mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768),
-         .resid  = mean_per_session - .fitted) %>% 
-    ggplot(aes(.resid)) +
-    geom_histogram(fill = "steelblue", color = "grey30") +
-    theme_bw()
+         .resid  = mean_per_session - .fitted) %>%
+  ggplot(aes(.fitted, .resid)) +
+  geom_point() +
+  geom_smooth() +
+  theme_bw()
+
+broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
+  select(appointment_date, mean_per_session, .fitted) %>%
+  mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768),
+         .resid  = mean_per_session - .fitted) %>%
+  ggplot(aes(.resid)) +
+  geom_histogram(fill = "steelblue", color = "grey30") +
+  theme_bw()
 
 
 # Population ----

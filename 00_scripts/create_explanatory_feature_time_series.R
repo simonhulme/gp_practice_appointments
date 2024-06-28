@@ -184,14 +184,59 @@ extract_individual_urls <- function(data_urls) {
 
 urls <- map(map(data_urls, extract_individual_urls), ~ str_subset(.x, "GPWPracticeCSV"))
 
-urls
+temporary_file <- tempfile()
+
+download.file(urls[[2]], temporary_file)
+
+contents <- 
+  unzip(temporary_file, list = TRUE) %>% 
+  pull(Name) %>% 
+  str_subset(".csv")
+
+contents
+
+dates <- 
+  contents %>% 
+  str_remove("^[:digit:]+.") %>% 
+  str_remove("( General Practice )") %>% 
+  str_remove("[:punct:] ") %>% 
+  str_remove(" Practice [L|l]evel.csv") 
+
+workforce_data_3 <- tibble(
+  extract_date = dates,
+  file = contents
+) 
+
+workforce_data_3 <-
+  workforce_data_3 %>%
+  mutate(
+    data = map(file, ~ read_csv(unz(temporary_file, .x))),
+    data = map(data, ~ filter(.x, SUB_ICB_CODE == "03R")))
+
+workforce_3 <- 
+  workforce_data_3 %>% 
+  mutate(data = map(data, process_workforce_data)) %>% 
+  unnest(data) %>% 
+  select(-file) %>% 
+  mutate(extract_date = dmy(paste0("01 ", extract_date))) %>% 
+  replace_na(list(TOTAL_GP_FTE = 0, TOTAL_NURSES_FTE = 0, TOTAL_DPC_FTE = 0)) %>% 
+  group_by(extract_date) %>% 
+  summarise(
+    total_gp = sum(TOTAL_GP_FTE) %>% round(2),
+    total_nurse = sum(TOTAL_NURSES_FTE) %>% round(2),
+    total_dpc = sum(TOTAL_DPC_FTE) %>% round(2)
+  )
+
+
+
+## September 2022 ----
 
 
 
 
 
 
-## TODO
+## TODO ----
 
 # get_gp_data_daily <- function(url) {
 #     

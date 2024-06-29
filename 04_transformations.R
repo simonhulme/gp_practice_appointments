@@ -5,6 +5,7 @@ library(timetk)
 
 wakefield_working_week_daily <- read_rds("00_data/processed/wakefield_working_week_daily.rds")
 wakefield_population_monthly <- read_rds("00_data/processed/wakefield_population_monthly.rds")
+wakefield_workforce_monthly  <- read_rds("00_data/processed/wakefield_workforce_monthly.rds")
 
 # Calendar Adjustments ----
 
@@ -120,10 +121,19 @@ gp_f2f_same_day_attended_mean_weekly %>%
                    .value = mean_per_session,
                    .smooth = TRUE,
                    .title = "GP f2f same day attended appts - adj for Bank Holidays and TARGET")
+
+gp_f2f_same_day_attended_mean_weekly %>%
+  plot_time_series_regression(
+    .date_var = appointment_date,
+    .formula = mean_per_session ~
+      as.numeric(appointment_date) +
+      week(appointment_date) +
+      month(appointment_date, label = TRUE) +
+      year(appointment_date),
+    .show_summary = TRUE
+  )
   
 # PROGRESS UP TO HERE ----
-
-
 
 # Add Population ----
 
@@ -139,241 +149,37 @@ gp_f2f_same_day_attended_population <-
   select(appointment_date, population = registered_population, appointments = count_of_appointments,
          holiday, training, pandemic)
 
-## explore using regression model 
+# Add Workforce ----
 
-gp_f2f_same_day_attended_population %>%
+wakefield_workforce_daily <- 
+  tk_make_timeseries(start_date = "2020-09-01", end_date = "2024-05-01") %>% 
+  as_tibble_col(column_name = "appointment_date") %>% 
+  left_join(wakefield_workforce_monthly, by = c("appointment_date" = "extract_date")) 
+
+gp_f2f_same_day_attended_workforce <- 
+  wakefield_workforce_daily %>% 
+  inner_join(gp_f2f_same_day_attended) %>% 
+  select(-c(appt_mode:time_between_book_and_appt, hcp_type)) %>% 
+  fill(contains("total"))
+
+gp_f2f_same_day_attended_workforce
+
+gp_f2f_same_day_attended_workforce_population <- 
+  gp_f2f_same_day_attended_workforce %>% 
+  left_join(wakefield_population_daily)
+
+gp_f2f_same_day_attended_workforce_population %>% 
   plot_time_series_regression(
     .date_var = appointment_date,
-    .formula = appointments ~
+    .formula = count_of_appointments ~
       wday(appointment_date, label = TRUE) +
       month(appointment_date, label = TRUE) +
+      year(appointment_date) +
       holiday +
       training +
-      pandemic +
-      population,
+      total_gp +
+      registered_population,
     .show_summary = TRUE
   )
 
-# Workforce ----
-
-# TODO
-# Adjust for staffing levels
-
-## Variance Reduction ----
-
-### untransformed ----
-
-glm_fitted <- 
-  lm(mean_per_session ~
-       as.numeric(appointment_date) +
-       month(appointment_date, label = TRUE) +
-       year(appointment_date),
-     data = gp_f2f_same_day_attended_mean_weekly)
-
-summary(glm_fitted)
-
-lmtest::bptest(
-  glm_fitted,
-  data = gp_f2f_same_day_attended_mean_weekly
-)
-
-broom::augment(glm_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
-  select(appointment_date, mean_per_session, .fitted) %>% 
-  mutate(.resid  = mean_per_session - .fitted) %>% 
-  ggplot(aes(.fitted, .resid)) +
-  geom_point() +
-  geom_smooth() +
-  theme_bw()
-
-### log transformed ----
-
-glm_log_fitted <- 
-  lm(log1p(mean_per_session) ~
-       as.numeric(appointment_date) +
-       week(appointment_date) +
-       month(appointment_date, label = TRUE) +
-       year(appointment_date),
-     data = gp_f2f_same_day_attended_mean_weekly)
-
-summary(glm_log_fitted)
-
-lmtest::bptest(
-  glm_log_fitted,
-  data = gp_f2f_same_day_attended_mean_weekly
-)
-
-broom::augment(glm_log_fitted, gp_f2f_same_day_attended_mean_weekly) %>% 
-  select(appointment_date, mean_per_session, .fitted) %>% 
-  mutate(.fitted = exp(.fitted),
-         .resid  = mean_per_session - .fitted) %>% 
-  ggplot(aes(.fitted, .resid)) +
-  geom_point() +
-  geom_smooth() +
-  theme_bw()
-
-###  box cox transformed ---- 
-
-glm_boxcox_fitted <- 
-  lm(box_cox_vec(mean_per_session, lambda = "auto") ~
-       as.numeric(appointment_date) +
-       month(appointment_date, label = TRUE) +
-       factor(year(appointment_date)),
-     data = gp_f2f_same_day_attended_mean_weekly)
-
-summary(glm_boxcox_fitted)
-
-lmtest::bptest(
-  glm_boxcox_fitted,
-  data = gp_f2f_same_day_attended_mean_weekly
-)
-
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
-  select(appointment_date, mean_per_session, .fitted) %>%
-  mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768)) %>%
-  ggplot(aes(.fitted, mean_per_session)) +
-  geom_point() +
-  geom_abline() +
-  expand_limits(x = 250, y = 250) +
-  theme_bw()
-
-
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
-  select(appointment_date, mean_per_session, fitted = .fitted) %>%
-  mutate(fitted = box_cox_inv_vec(fitted, lambda = 0.629257000156768)) %>%
-  pivot_longer(-appointment_date) %>%
-  plot_time_series(
-    .date_var = appointment_date,
-    .value = value,
-    .color_var = name,
-    .smooth = FALSE
-  )
-
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
-  select(appointment_date, mean_per_session, .fitted) %>%
-  mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768),
-         .resid  = mean_per_session - .fitted) %>%
-  ggplot(aes(.fitted, .resid)) +
-  geom_point() +
-  geom_smooth() +
-  theme_bw()
-
-broom::augment(glm_boxcox_fitted, gp_f2f_same_day_attended_mean_weekly) %>%
-  select(appointment_date, mean_per_session, .fitted) %>%
-  mutate(.fitted = box_cox_inv_vec(.fitted, lambda = 0.629257000156768),
-         .resid  = mean_per_session - .fitted) %>%
-  ggplot(aes(.resid)) +
-  geom_histogram(fill = "steelblue", color = "grey30") +
-  theme_bw()
-
-# Moving averages and smoothing transformation ----
-
-## Moving / Rolling Averages ----
-
-### Total Appointments Monthly
-all_appointments_daily_tbl %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(count_of_appointments)
-    ) %>% 
-    mutate(appointments_roll = slidify_vec(appointments, mean, .period = 12, .align = "center")) %>%
-    pivot_longer(contains("appointments"), names_to = "type") %>%
-    plot_time_series(
-        .date_var = appointment_date,
-        .value = value,
-        .color_var = type,
-        .smooth = FALSE
-    )
-
-### Mean Same Day GP Appt per day by mode - Weekly
-same_day_attended_gp_weekly_mean_by_mode_tbl <-
-    all_appointments_daily_tbl %>%
-    filter(hcp_type == "GP",
-           ! appt_mode %in% c("Unknown", "Video Conference/Online"),
-           time_between_book_and_appt == "Same Day",
-           appt_status == "Attended") %>%
-    group_by(appt_mode) %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        mean_daily_appointments = mean(appointments)
-    ) 
-
-same_day_attended_gp_weekly_mean_by_mode_tbl %>%
-    mutate(
-        rolled_mean_appointments = slidify_vec(
-            mean_daily_appointments,
-            mean,
-            .period = 52,
-            .align = "center"
-        )
-    ) %>%
-    pivot_longer(contains("mean"), names_to = "type") %>%
-    plot_time_series(
-        .date_var = appointment_date,
-        .value = value,
-        .color_var = type,
-        .smooth = FALSE
-    ) 
-
-## Smoothing using LOESS ----
-
-### Total Appointments Monthly
-all_appointments_daily_tbl %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(count_of_appointments)
-    ) %>% 
-    mutate(appointments_smooth = smooth_vec(appointments, period = 12)) %>%
-    pivot_longer(contains("appointments"), names_to = "type") %>%
-    plot_time_series(
-        .date_var = appointment_date,
-        .value = value,
-        .color_var = type,
-        .smooth = FALSE
-    )
-
-### Mean Same Day GP Appt per day by mode - Weekly
-
-same_day_attended_gp_weekly_mean_by_mode_tbl %>%
-    mutate(
-        smooth_mean_appointments = smooth_vec(
-            mean_daily_appointments,
-            period = 52
-        )
-    ) %>%
-    pivot_longer(contains("mean"), names_to = "type") %>%
-    plot_time_series(
-        .date_var = appointment_date,
-        .value = value,
-        .color_var = type,
-        .smooth = FALSE, 
-        .title = "Mean Daily Same Day Face-to-Face GP Appointments Attended per Week"
-    ) 
-
-## Revisit Decomposition using STL ----
-
-all_appointments_daily_tbl %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_stl_diagnostics(.date_var = appointment_date,
-                         .value = appointments, 
-                         .trend = "1 year",
-                         .frequency = "1 week", 
-                         .feature_set = c("observed", "season", "trend", "remainder"))
-
-
-## Explore other features from data ----
-
-# TODO
-
-
+## TODO: create new time series with these calendar features and external regressors ----

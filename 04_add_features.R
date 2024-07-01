@@ -72,28 +72,19 @@ wakefield_population_daily <-
 
 wakefield_working_week_with_calendar_adjustments_and_population <-
   wakefield_population_daily %>%
-  inner_join(wakefield_working_week_with_calendar_adjustments) %>%
-  select(
-    appointment_date,
-    population = registered_population,
-    appointments = count_of_appointments,
-    holiday,
-    training,
-    pandemic
-  )
+  inner_join(wakefield_working_week_with_calendar_adjustments)
 
 ## Workforce ----
 
 wakefield_workforce_daily <- 
   tk_make_timeseries(start_date = "2020-09-01", end_date = "2024-05-01") %>% 
   as_tibble_col(column_name = "appointment_date") %>% 
-  left_join(wakefield_workforce_monthly, by = c("appointment_date" = "extract_date")) 
+  left_join(wakefield_workforce_monthly, by = c("appointment_date" = "extract_date")) %>% 
+  fill(contains("total"))
 
 wakefield_working_week_with_calendar_adjustments_population_workforce <- 
   wakefield_workforce_daily %>% 
-  inner_join(wakefield_working_week_with_calendar_adjustments_and_population) %>% 
-  fill(contains("total")) %>% 
-  select(appointment_date, appointments, everything())
+  inner_join(wakefield_working_week_with_calendar_adjustments_and_population)
 
 
 # Save data ----

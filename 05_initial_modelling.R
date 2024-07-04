@@ -7,8 +7,6 @@ library(forecast)
 
 all_appointments <- read_rds("00_data/processed/wakefield_calendar_population_workforce.rds")
 
-# explore gp f2f same day attended workload 
-
 gp_f2f_same_day_appointments <-
     all_appointments %>%
     filter(
@@ -49,8 +47,9 @@ gp_f2f_same_day_appointments %>%
 
 ## Log transformation of response ----
 
-gp_f2f_same_day_appointments %>% 
-    plot_time_series(.date_var = appointment_date, .value = log1p(count_of_appointments))
+gp_f2f_same_day_appointments %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = log1p(count_of_appointments))
 
 gp_f2f_same_day_appointments %>% 
     plot_time_series_regression(
@@ -68,29 +67,6 @@ gp_f2f_same_day_appointments %>%
     )
 
 ## log transformation appears to model past data well
-
-## Power transformation (Box Cox) ----
-
-gp_f2f_same_day_appointments %>%
-    plot_time_series(.date_var = appointment_date,
-                     .value = box_cox_vec(count_of_appointments + 1, lambda = "auto"))
-
-gp_f2f_same_day_appointments %>% 
-    mutate(count_of_appointments = box_cox_vec(count_of_appointments + 1, lambda = "auto")) %>% 
-    plot_time_series_regression(
-        appointment_date,
-        count_of_appointments ~ 
-            wday(appointment_date, label = TRUE) +
-            month(appointment_date, label = TRUE) +
-            registered_population +
-            holiday +
-            training +
-            total_gp +
-            pandemic,
-        .show_summary = TRUE
-    )
-
-## Box Cox transformation makes model worse 
 
 # Rolling and Smoothing ----
 
@@ -144,114 +120,117 @@ gp_f2f_same_day_appointments %>%
     select(appointment_date, name, value) %>% 
     plot_time_series(appointment_date, .value = value, .color_var = name, .smooth = FALSE)
 
-# Other Simple Forecasting Methods ----
+# Range Reduction ----
 
-## Visualisation----
+# FTE Staff
 
-gp_f2f_same_day_appointments %>% 
-    select(appointment_date, appointments = count_of_appointments) %>% 
-    mutate(lag_1 = lag(appointments),
-           diff  = appointments - lag_1) %>% 
-    plot_time_series(.date_var = appointment_date, .value = diff)
+total_nurse_FTE <-
+    gp_f2f_same_day_appointments %>%
+    select(appointment_date, total_nurse)
 
-gp_f2f_same_day_appointments %>% 
-    select(appointment_date, appointments = count_of_appointments) %>% 
-    mutate(lag_1 = lag(appointments),
-           diff  = appointments - lag_1) %>% 
-    plot_acf_diagnostics(.date_var = appointment_date, .value = diff, .lags = 260)
+total_nurse_FTE %>%
+    plot_time_series(.date_var = appointment_date, .value = total_nurse)
 
+total_nurse_FTE %>%
+    plot_acf_diagnostics(.date_var = appointment_date,
+                         .value = total_nurse,
+                         .lags = 60)
 
-## Benchmark Methods ----
+# Imputation and Outlier Cleaning ----
 
-### Mean Method ----
+## This data set has no missing data so will focus on anomaly/outlier detection
 
 gp_f2f_same_day_appointments %>%
-    select(appointment_date, appointments = count_of_appointments) %>% 
-    mutate(mean_appointments = mean(appointments)) %>% 
-    bind_rows(future_frame(., .date_var = appointment_date, .length_out = 65)) %>% 
-    fill(mean_appointments, .direction = "down") %>%
-    pivot_longer(-appointment_date) %>% 
-    plot_time_series(.date_var = appointment_date, value, name, .smooth = FALSE )
+    select(appointment_date, count_of_appointments) %>%
+    plot_anomaly_diagnostics(.date_var = appointment_date,
+                             .value = count_of_appointments,
+                             .title = "Low anomalies: Holiday/Training. High anomalies: Day after Holiday")
 
-### Simple Naive Method ----
+gp_f2f_same_day_appointments %>%
+    select(appointment_date, count_of_appointments) %>%
+    mutate(appointments_cleaned = ts_clean_vec(count_of_appointments, period = 5)) %>%
+    pivot_longer(-appointment_date) %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = value,
+        .color_var = name,
+        .smooth = FALSE,
+        .title = "Cleaning not appropriate as outliers are informative"
+    )
 
+## difference between values after Bank Holiday - observed vs. cleaned - indicates number of
+## extra appointments expected after Bank Holiday closures 
+
+# Lags and Differencing ----
+
+## Explore lags ----
 gp_f2f_same_day_appointments %>% 
-    select(appointment_date, appointments = count_of_appointments) %>% 
-    bind_rows(future_frame(., .date_var = appointment_date, .length_out = 65)) %>% 
-    mutate(naive_fc = forecast::naive(appointments, 1) %>% .$fitted) %>% 
-    pivot_longer(-appointment_date) %>% 
-    plot_time_series(.date_var = appointment_date, value, name, .smooth = FALSE)
+    plot_acf_diagnostics(.date_var = appointment_date, count_of_appointments, .lags = 30)
 
-### Seasonal Naive Method ---
-
+## Regression Model with lags ----
 gp_f2f_same_day_appointments %>% 
-    select(appointment_date, appointments = count_of_appointments) %>% 
-    # bind_rows(future_frame(., .date_var = appointment_date, .length_out = 65)) %>% 
-    mutate(seasonal_lag = lag(appointments, 5)) %>% 
-    bind_rows(future_frame(., .date_var = appointment_date, .length_out = 65)) %>% tail(70)
-    pivot_longer(-appointment_date) %>% 
-    plot_time_series(.date_var = appointment_date, value, name, .smooth = FALSE)
+    tk_augment_lags(.value = count_of_appointments, .lags = c(1:5)) %>% 
+    drop_na() %>% 
+    mutate(across(contains("count"), log1p)) %>% 
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula  = count_of_appointments ~ 
+            wday(appointment_date, label = TRUE) +
+            month(appointment_date, label = TRUE) +
+            year(appointment_date) +
+            registered_population +
+            holiday +
+            training +
+            pandemic +
+            count_of_appointments_lag1 +
+            count_of_appointments_lag2,
+        .show_summary = TRUE,
+        .interactive  = TRUE,
+        .title = "Lag terms address peak after holiday (but not sure why)"
+    )
 
-### Naive method with drift
+## Differencing ----
 
-## TODO
-    
-    
-# Range Reduction ----
-    
+## start looking at cumulative sum of appointments
+
+differenced_data <- 
     gp_f2f_same_day_appointments %>%
-        select(
-            appointment_date,
-            contains("total")
-        ) %>%
-        mutate(across(where(is.numeric), standardize_vec)) %>%
-        pivot_longer(-appointment_date) %>%
-        plot_time_series(
-            .date_var = appointment_date,
-            .value = value,
-            .color_var = name,
-            .smooth = FALSE
-        )
+    filter_by_time(.date_var = appointment_date,
+                   .start_date = "start",
+                   .end_date = "end") %>%
+    select(appointment_date, count_of_appointments) %>%
+    mutate(total_appointments = cumsum(count_of_appointments),
+           differences        = diff_vec(count_of_appointments, lag = 1, difference = 1),
+           differences_2      = diff_vec(differences, lag = 1, difference = 1)
+    )
+    
+differenced_data %>% 
+    pivot_longer(-appointment_date) %>% 
+    group_by(name) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = value,
+                     .smooth = FALSE)
 
-# FTE Staff ----
-    
+differenced_data %>%
+    plot_acf_diagnostics(.date_var = appointment_date, .value = differences_2, .lags = 40)
 
-    total_nurse_FTE <- 
-        gp_f2f_same_day_appointments %>% 
-        select(appointment_date, total_nurse)
-    
-    total_nurse_FTE %>% 
-        plot_time_series(.date_var = appointment_date, .value = total_nurse)
-    
-    total_nurse_FTE %>% 
-        plot_acf_diagnostics(.date_var = appointment_date, .value = total_nurse, .lags = 60)
-    
-    total_nurse_FTE %>%
-        plot_time_series(.date_var = appointment_date, .value = diff)
-    
-    total_nurse_FTE %>% 
-        plot_acf_diagnostics(.date_var = appointment_date, .value = diff, .lags = 60)
-    
-   
+## Fourier Series ----
 
+gp_f2f_same_day_appointments %>% 
+    plot_time_series(appointment_date, count_of_appointments)
 
-    ## Is this an AR1    
-    
-    total_nurse_FTE_ts <- 
-        as.ts(total_nurse_FTE$total_nurse)
-    
-    ar.mle(total_nurse_FTE_ts)
-    
-    ts_sim <- tibble(appts  = rep(154.22, 956),
-                     ar_sim = arima.sim(model = list(ar = 0.9965), n = 956),
-                     adjusted_appts = appts + ar_sim) %>% 
-        mutate(appointment_date = total_nurse_FTE$appointment_date)
-    
-    ts_sim %>% 
-        plot_time_series(.date_var = appointment_date, adjusted_appts)
+gp_f2f_same_day_appointments %>% 
+    plot_acf_diagnostics(appointment_date, count_of_appointments, .lags = 262)
 
-    mean(ts_sim$adjusted_appts)
-
-    ts_sim %>% 
-        plot_acf_diagnostics(.date_var = appointment_date, adjusted_appts, .lags = 60)
-    
+gp_f2f_same_day_appointments %>%
+    select(appointment_date, count_of_appointments, holiday, training, pandemic) %>%
+    tk_augment_fourier(
+        .date_var = appointment_date,
+        .periods = c(7, 365),
+        .K = 1
+    ) %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = log1p(count_of_appointments) ~ as.numeric(appointment_date) + . - appointment_date,
+        .show_summary = TRUE
+    )

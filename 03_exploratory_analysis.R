@@ -6,30 +6,6 @@ library(timetk)
 
 wakefield_working_week_daily <- read_rds("00_data/processed/wakefield_working_week_daily.rds")
 
-total_daily_tbl <-
-    wakefield_working_week_daily %>%
-    filter(hcp_type == "GP" | hcp_type == "Other Practice staff") %>%  
-    group_by(hcp_type) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "day",
-        appointments = sum(count_of_appointments)
-    )
-
-same_day_vs_booked_daily_tbl <-
-    wakefield_working_week_daily %>%
-    filter(hcp_type %in% c("GP", "Other Practice staff") ,
-           time_between_book_and_appt != "Unknown") %>%
-    mutate(booking =
-               if_else(time_between_book_and_appt == "Same Day", "Same Day", "Advance")) %>%
-    group_by(hcp_type, booking, appt_mode) %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    ungroup()
-
 # Summary Statistics ----
 
 skimr::skim(wakefield_working_week_daily)
@@ -117,14 +93,25 @@ wakefield_working_week_daily %>%
 
 # Time series Analysis ----
 
-## All Appointments ----
+## Total Appointments Booked ----
 
-total_daily_tbl %>% 
+total_booked_daily_tbl <-
+    wakefield_working_week_daily %>%
+    filter(hcp_type == "GP" | hcp_type == "Other Practice staff") %>%  
+    group_by(hcp_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    )
+
+# using loess smoother 
+total_booked_daily_tbl %>% 
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
                      .title = "Time Series Plot: Total Daily Appointments")
 
-total_daily_tbl %>%
+total_booked_daily_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "week",
@@ -134,7 +121,7 @@ total_daily_tbl %>%
                      .value = total_appointments,
                      .title = "Time Series Plot: Total Weekly Appointments")
 
-total_daily_tbl %>%
+total_booked_daily_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -144,15 +131,38 @@ total_daily_tbl %>%
                      .value = total_appointments,
                      .title = "Time Series Plot: Total Monthly Appointments")
 
-# REVIEWED UP TO HERE ----
+# using moving/rolling average
+total_booked_daily_tbl %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)
+    ) %>%
+    mutate(appointments_roll = slidify_vec(appointments, .f = mean, .period = 12)) %>% 
+    pivot_longer(cols = contains("appointments")) %>% 
+    plot_time_series(.date_var = appointment_date, .value = value, .color_var = name, .smooth = FALSE)
 
-## Advance vs. Same-Day Appointment Booking ----
+## Advance vs. Same-Day Appointment Booking by HCP type ----
 
-same_day_vs_booked_daily_tbl %>%
+same_day_vs_advance_daily_tbl <-
+    wakefield_working_week_daily %>%
+    filter(hcp_type %in% c("GP", "Other Practice staff") ,
+           time_between_book_and_appt != "Unknown") %>%
+    mutate(booking =
+               if_else(time_between_book_and_appt == "Same Day", "Same Day", "Advance")) %>%
+    group_by(hcp_type, booking, appt_mode) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    ungroup()
+
+same_day_vs_advance_daily_tbl %>%
     group_by(hcp_type, booking) %>%
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "week",
+        .by = "month",
         total_appointments = sum(appointments)
     ) %>%
     plot_time_series(
@@ -161,6 +171,44 @@ same_day_vs_booked_daily_tbl %>%
         .smooth = T, 
         .facet_ncol = 2
     )
+
+## Face-to-Face vs Telephone appointments by HCP Type ----
+
+f2f_vs_phone_daily_tbl <-
+    wakefield_working_week_daily %>%
+    filter(hcp_type %in% c("GP", "Other Practice staff") ,
+           appt_mode %in% c("Face-to-Face", "Telephone")) %>% 
+    group_by(hcp_type, appt_mode) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    ungroup()
+
+f2f_vs_phone_daily_tbl %>% 
+    pivot_wider(names_from = appt_mode, values_from = appointments) %>% 
+    mutate(total = `Face-to-Face` + Telephone) %>% 
+    pivot_longer(cols = 3:5, names_to = "appt_mode", values_to = "appointments") %>% 
+    group_by(hcp_type, appt_mode) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = total_appointments,
+        .smooth = T, 
+        .facet_ncol = 3
+    )
+
+
+
+
+
+
+## TODO: comment on below 
 
 # Autocorrelation Functions (ACF/PACF) ----
 
@@ -352,9 +400,76 @@ same_day_vs_booked_daily_tbl %>%
 
 # Seasonal Decomposition ----
 
+## Total Appointments Booked - Total Monthly Appointments
+
+total_booked_daily_tbl %>%
+    ungroup() %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)
+    ) %>%
+    plot_stl_diagnostics(
+        appointment_date,
+        appointments,
+        .feature_set = c("observed", "season", "trend", "remainder")
+    )
+
+
+
+## Total Appointments Booked - Mean daily value by Month Post Pandemic
+
+total_booked_daily_tbl %>%
+    ungroup() %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08") %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = mean(appointments)
+    ) %>%
+    plot_stl_diagnostics(
+        appointment_date,
+        appointments,
+        .feature_set = c("observed", "season", "trend", "remainder"), 
+        .frequency = 12
+    )
+
+## NEED TO COMMENT ON STL DECOMPOSITION
+
+
+
 ## separate time series by: hcp / mode / booking
 
-### GP: telephone vs face to face vs home visit ----
+### GP: total ----
+
+wakefield_working_week_daily %>% 
+    filter(hcp_type == "GP") %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_stl_diagnostics(appointment_date, appointments, .feature_set = c("observed", "season", "trend", "remainder"))
+
+wakefield_working_week_daily %>%
+    filter(hcp_type == "GP") %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08") %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_stl_diagnostics(
+        appointment_date,
+        appointments,
+        .feature_set = c("observed", "season", "trend", "remainder"), 
+        .frequency = 12
+    )
+
+
+
+
+
 
 wakefield_working_week_daily %>% 
     filter(hcp_type == "GP", appt_mode %in% c("Face-to-Face", "Telephone", "Home Visit")) %>% 
@@ -365,6 +480,25 @@ wakefield_working_week_daily %>%
         appointments = sum(count_of_appointments)
     ) %>%
     plot_stl_diagnostics(appointment_date, appointments, .feature_set = c("observed", "season", "trend", "remainder"))
+
+wakefield_working_week_daily %>% 
+    filter(hcp_type == "GP", appt_mode %in% c("Face-to-Face", "Telephone", "Home Visit")) %>% 
+    group_by(appt_mode) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_stl_diagnostics(appointment_date, appointments, .feature_set = c("observed", "season", "trend", "remainder"))
+
+
+
+
+
+
+
+
+
 
 wakefield_working_week_daily %>% 
     filter(hcp_type == "GP", appt_mode %in% c("Face-to-Face", "Telephone", "Home Visit")) %>% 
@@ -495,6 +629,10 @@ same_day_vs_booked_daily_tbl %>%
 ## 5. Regular dips in series - Bank Holidays & Staff Training ----
 ### * Weekly total may be less but daily could be higher ----
 ## 6. Downward trend in GP appts but upward trend for other staff ----
+## 7. GP advance bookings stable but same day appointments falling ----
+### * Rapid growth in advance and same day appointments for other staff ----
+## 8. Increasing Face-to-Face appointments for all health care professionals  ----
+### * Possible correction after significant changes in practice during pandemic ----
 
 # TODO ----
 ## 1. Create time series to handle anomalies ----

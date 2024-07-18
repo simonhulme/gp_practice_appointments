@@ -103,15 +103,21 @@ total_booked_daily_tbl <-
         .date_var = appointment_date,
         .by = "day",
         appointments = sum(count_of_appointments)
-    )
+    ) %>% 
+    ungroup() %>% 
+    pivot_wider(names_from = hcp_type, values_from = appointments) %>% 
+    mutate(Total = GP + `Other Practice staff`) %>% 
+    pivot_longer(cols = -appointment_date, names_to = "hcp_type", values_to = "appointments")
 
 # using loess smoother 
 total_booked_daily_tbl %>% 
+    group_by(hcp_type) %>% 
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
                      .title = "Time Series Plot: Total Daily Appointments")
 
 total_booked_daily_tbl %>%
+    group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "week",
@@ -122,6 +128,7 @@ total_booked_daily_tbl %>%
                      .title = "Time Series Plot: Total Weekly Appointments")
 
 total_booked_daily_tbl %>%
+    group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -133,6 +140,7 @@ total_booked_daily_tbl %>%
 
 # using moving/rolling average
 total_booked_daily_tbl %>% 
+    filter(hcp_type == "Total") %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -187,9 +195,6 @@ f2f_vs_phone_daily_tbl <-
     ungroup()
 
 f2f_vs_phone_daily_tbl %>% 
-    pivot_wider(names_from = appt_mode, values_from = appointments) %>% 
-    mutate(total = `Face-to-Face` + Telephone) %>% 
-    pivot_longer(cols = 3:5, names_to = "appt_mode", values_to = "appointments") %>% 
     group_by(hcp_type, appt_mode) %>%
     summarise_by_time(
         .date_var = appointment_date,
@@ -200,13 +205,8 @@ f2f_vs_phone_daily_tbl %>%
         .date_var = appointment_date,
         .value = total_appointments,
         .smooth = T, 
-        .facet_ncol = 3
+        .facet_ncol = 2
     )
-
-
-
-
-
 
 ## TODO: comment on below 
 

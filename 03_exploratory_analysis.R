@@ -259,42 +259,6 @@ same_day_vs_advance_daily_tbl %>%
         .lags = 260
     )
 
-# Cross Correlation (CCF) ----
-
-# TODO: focus on GP same day total appointments compared to GP advance and Other staff
-
-# with log transformation, standardisation and outlier cleaning
-# results in series that can be compared with each other without being dominated by holiday data
-
-hcp_booking_type_wide_tbl <- 
-    same_day_vs_advance_daily_tbl %>% 
-    group_by(hcp_type, booking) %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "day", appointments = sum(appointments)) %>% 
-    pivot_wider(names_from = c(hcp_type, booking), values_from = appointments) %>% 
-    janitor::clean_names() %>% 
-    select(appointment_date, gp_same_day, everything()) %>% 
-    mutate(across(where(is.numeric), ~ log1p(.x) %>% standardize_vec)) %>% 
-    mutate(across(where(is.numeric), ~ ts_clean_vec(.x, period = 5)))
-
-hcp_booking_type_wide_tbl %>% 
-    pivot_longer(cols = - appointment_date) %>% 
-    plot_time_series(.date_var = appointment_date, .value = value, .facet_vars = name)
-
-
-hcp_booking_type_wide_tbl %>%
-    plot_acf_diagnostics(
-        .date_var = appointment_date,
-        .value = gp_same_day,
-        .ccf_vars = c(
-            gp_advance,
-            other_practice_staff_advance,
-            other_practice_staff_same_day
-        ),
-        .show_ccf_vars_only = TRUE,
-        .show_white_noise_bars = TRUE, 
-        .lags = 60
-    )
-
 # Seasonality ----
 
 ## Summary ----

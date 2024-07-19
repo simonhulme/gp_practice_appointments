@@ -7,6 +7,20 @@ library(forecast)
 
 all_appointments <- read_rds("00_data/processed/wakefield_calendar_population_workforce.rds")
 
+same_day_vs_advance_daily_tbl <-
+    all_appointments %>%
+    filter(hcp_type %in% c("GP", "Other Practice staff") ,
+           time_between_book_and_appt != "Unknown") %>%
+    mutate(booking =
+               if_else(time_between_book_and_appt == "Same Day", "Same Day", "Advance")) %>%
+    group_by(hcp_type, booking, appt_mode) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    ungroup()
+
 gp_f2f_same_day_appointments <-
     all_appointments %>%
     filter(
@@ -16,6 +30,100 @@ gp_f2f_same_day_appointments <-
         time_between_book_and_appt == "Same Day"
     ) %>% 
     select(-c(hcp_type, contains("appt")))
+
+gp_f2f_same_day_appointments %>% 
+    select(appointment_date, count_of_appointments) %>% 
+    plot_time_series(.date_var = appointment_date, .value = count_of_appointments)
+    
+gp_f2f_same_day_signature_tbl <- 
+    gp_f2f_same_day_appointments %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = mean(count_of_appointments, na.rm = TRUE)) %>% 
+    select(appointment_date, appointments) %>% 
+    tk_augment_timeseries_signature(.date_var = appointment_date) %>% 
+    select(-diff, -matches("iso|xts"), -c(hour:am.pm), - contains("wday"))
+
+# ** Linear Trend
+gp_f2f_same_day_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ index.num,
+        .show_summary = TRUE
+    )
+
+# ** Non-linear Trend - Splines
+gp_f2f_same_day_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::bs(index.num, degree = 4),
+        .show_summary = TRUE
+    )
+
+gp_f2f_same_day_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 2),
+        .show_summary = TRUE
+    )
+
+
+
+# Cross Correlation (CCF) ----
+
+# with log transformation, standardisation and outlier cleaning
+# results in series that can be compared with each other without being dominated by holiday data
+
+hcp_booking_type_wide_tbl <- 
+    same_day_vs_advance_daily_tbl %>% 
+    group_by(hcp_type, booking) %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "day", appointments = sum(appointments)) %>% 
+    pivot_wider(names_from = c(hcp_type, booking), values_from = appointments) %>% 
+    janitor::clean_names() %>% 
+    select(appointment_date, gp_same_day, everything()) %>% 
+    mutate(across(where(is.numeric), ~ log1p(.x) %>% standardize_vec)) %>% 
+    mutate(across(where(is.numeric), ~ ts_clean_vec(.x, period = 5)))
+
+hcp_booking_type_wide_tbl %>% 
+    pivot_longer(cols = - appointment_date) %>% 
+    plot_time_series(.date_var = appointment_date, .value = value, .facet_vars = name)
+
+hcp_booking_type_wide_tbl %>%
+    plot_acf_diagnostics(
+        .date_var = appointment_date,
+        .value = gp_same_day,
+        .ccf_vars = c(
+            gp_advance,
+            other_practice_staff_advance,
+            other_practice_staff_same_day
+        ),
+        .show_ccf_vars_only = TRUE,
+        .show_white_noise_bars = TRUE, 
+        .lags = 60
+    )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Variance Reduction ----
 

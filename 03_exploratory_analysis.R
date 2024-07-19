@@ -48,6 +48,7 @@ wakefield_working_week_daily %>%
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
     xlab("Time between booking and appointment date")
 
+
 ### GP vs Other Staff by Feature ----
 wakefield_working_week_daily %>%
     filter(hcp_type == "GP" | hcp_type == "Other Practice staff",
@@ -170,6 +171,20 @@ same_day_vs_advance_daily_tbl %>%
     group_by(hcp_type, booking) %>%
     summarise_by_time(
         .date_var = appointment_date,
+        .by = "day",
+        total_appointments = sum(appointments)
+    ) %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = total_appointments,
+        .smooth = T, 
+        .facet_ncol = 2
+    )
+
+same_day_vs_advance_daily_tbl %>%
+    group_by(hcp_type, booking) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
         .by = "month",
         total_appointments = sum(appointments)
     ) %>%
@@ -212,39 +227,73 @@ f2f_vs_phone_daily_tbl %>%
 
 # Autocorrelation Functions (ACF/PACF) ----
 
-total_daily_tbl %>%
+total_booked_daily_tbl %>%
     group_by(hcp_type) %>% 
     plot_acf_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
         .interactive = TRUE,
-        .title = "ACF / PACF Plots: GP/Other Staff Total Appointments"
+        .title = "ACF / PACF Plots: GP/Other Staff Total Appointments",
+        .lags = 260
     )
 
-same_day_vs_booked_daily_tbl %>% 
+same_day_vs_advance_daily_tbl %>% 
     filter(hcp_type == "GP") %>% 
     group_by(booking) %>% 
     plot_acf_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
         .interactive = TRUE,
-        .title = "ACF / PACF Plots: GP Appts Advance Booked / Same Day"
+        .title = "ACF / PACF Plots: GP Appts Advance Booked / Same Day",
+        .lags = 260
     )
 
-same_day_vs_booked_daily_tbl %>% 
+same_day_vs_advance_daily_tbl %>% 
     filter(hcp_type == "Other Practice staff") %>% 
     group_by(booking) %>% 
     plot_acf_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
         .interactive = TRUE,
-        .title = "ACF / PACF Plots: Other Practice staff Advance Booked / Same Day"
+        .title = "ACF / PACF Plots: Other Practice staff Advance Booked / Same Day",
+        .lags = 260
     )
 
 # Cross Correlation (CCF) ----
 
-# TODO: need new variables to add in ?lagged indicators
+# TODO: focus on GP same day total appointments compared to GP advance and Other staff
 
+# with log transformation, standardisation and outlier cleaning
+# results in series that can be compared with each other without being dominated by holiday data
+
+hcp_booking_type_wide_tbl <- 
+    same_day_vs_advance_daily_tbl %>% 
+    group_by(hcp_type, booking) %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "day", appointments = sum(appointments)) %>% 
+    pivot_wider(names_from = c(hcp_type, booking), values_from = appointments) %>% 
+    janitor::clean_names() %>% 
+    select(appointment_date, gp_same_day, everything()) %>% 
+    mutate(across(where(is.numeric), ~ log1p(.x) %>% standardize_vec)) %>% 
+    mutate(across(where(is.numeric), ~ ts_clean_vec(.x, period = 5)))
+
+hcp_booking_type_wide_tbl %>% 
+    pivot_longer(cols = - appointment_date) %>% 
+    plot_time_series(.date_var = appointment_date, .value = value, .facet_vars = name)
+
+
+hcp_booking_type_wide_tbl %>%
+    plot_acf_diagnostics(
+        .date_var = appointment_date,
+        .value = gp_same_day,
+        .ccf_vars = c(
+            gp_advance,
+            other_practice_staff_advance,
+            other_practice_staff_same_day
+        ),
+        .show_ccf_vars_only = TRUE,
+        .show_white_noise_bars = TRUE, 
+        .lags = 60
+    )
 
 # Seasonality ----
 

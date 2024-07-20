@@ -29,7 +29,8 @@ gp_f2f_same_day_appointments <-
         appt_status == "Attended",
         time_between_book_and_appt == "Same Day"
     ) %>% 
-    select(-c(hcp_type, contains("appt")))
+    select(-c(hcp_type, contains("appt"))) %>% 
+    mutate(across(where(is.numeric), ~ box_cox_vec(.x) %>% standardize_vec))
 
 gp_f2f_same_day_appointments %>% 
     select(appointment_date, count_of_appointments) %>% 
@@ -37,10 +38,11 @@ gp_f2f_same_day_appointments %>%
     
 gp_f2f_same_day_signature_tbl <- 
     gp_f2f_same_day_appointments %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = mean(count_of_appointments, na.rm = TRUE)) %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "day", appointments = mean(count_of_appointments, na.rm = TRUE)) %>% 
     select(appointment_date, appointments) %>% 
     tk_augment_timeseries_signature(.date_var = appointment_date) %>% 
-    select(-diff, -matches("iso|xts"), -c(hour:am.pm), - contains("wday"))
+    select(-diff, -matches("iso|xts"), -c(hour:am.pm)) %>% 
+    mutate(appointments = box_cox_vec(appointments))
 
 # ** Linear Trend
 gp_f2f_same_day_signature_tbl %>%
@@ -61,10 +63,44 @@ gp_f2f_same_day_signature_tbl %>%
 gp_f2f_same_day_signature_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ splines::ns(index.num, df = 2),
+        .formula = appointments ~ splines::ns(index.num, df = 4),
         .show_summary = TRUE
     )
 
+# Seasonality ----
+gp_f2f_same_day_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ wday.lbl,
+        .show_summary = TRUE
+    )
+
+gp_f2f_same_day_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ month.lbl,
+        .show_summary = TRUE
+    )
+
+## Combining trend and seasonality
+gp_f2f_same_day_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
+        .show_summary = TRUE
+    )
+
+## adding in fourier terms
+gp_f2f_same_day_fourier_tbl <- 
+    gp_f2f_same_day_signature_tbl %>% 
+    tk_augment_fourier(.date_var = appointment_date, .periods = c(260))
+
+gp_f2f_same_day_fourier_tbl %>% 
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + .,
+        .show_summary = TRUE
+    )
 
 
 # Cross Correlation (CCF) ----

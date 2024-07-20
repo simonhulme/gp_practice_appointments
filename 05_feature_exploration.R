@@ -134,6 +134,93 @@ gp_f2f_same_day_fourier_tbl %>%
         .show_summary = TRUE
     )
 
+## modelling events
+
+gp_f2f_same_day_events_tbl <- 
+    gp_f2f_same_day_fourier_tbl %>% 
+    left_join(gp_f2f_same_day_appointments) %>% 
+    select(-c(contains("total"), registered_population, count_of_appointments, pandemic))
+
+gp_f2f_same_day_events_tbl %>% glimpse()
+
+## visualising events
+
+g <- 
+    gp_f2f_same_day_events_tbl %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = appointments,
+        .interactive = FALSE,
+        .smooth = FALSE
+    ) +
+    geom_point(colour = "red",
+               data = . %>% filter(holiday == "Yes")) +
+    geom_point(colour = "green",
+               data = . %>% filter(training == "Yes")) 
+    
+plotly::ggplotly(g)
+
+## model events and re-visualise
+gp_f2f_same_day_events_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 3) + .,
+        .show_summary = TRUE
+    )
+
+## add in terms to account for lagged events
+gp_f2f_same_day_events_with_lags_tbl <- 
+    gp_f2f_same_day_events_tbl %>% 
+    mutate(training_lag = lag(training),
+           holiday_lag = lag(holiday)) %>% 
+    drop_na()
+
+gp_f2f_same_day_events_with_lags_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 5) + .,
+        .show_summary = TRUE
+    )
+
+## explore xregs - lagged
+
+gp_f2f_same_day_xregs <- 
+    gp_f2f_same_day_events_with_lags_tbl %>%
+    left_join(gp_f2f_same_day_appointments %>% select(appointment_date, total_gp:registered_population))
+
+## cross correlation
+gp_f2f_same_day_xregs %>% 
+    select(appointment_date, appointments, total_gp:registered_population) %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .ccf_vars = c(total_gp:registered_population))
+
+# model
+gp_f2f_same_day_xregs %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 1) + .,
+        .show_summary = TRUE
+    )
+
+
+## simplify model
+gp_f2f_same_day_xregs %>%
+    select(
+        appointment_date,
+        appointments,
+        index.num,
+        year,
+        month.lbl,
+        wday.lbl,
+        week,
+        appointment_date_cos260_K1,
+        appointment_date_sin260_K1,
+        holiday:registered_population
+    ) %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 6) + . - appointment_date - index.num,
+        .show_summary = TRUE
+    )
 
 
 # Cross Correlation (CCF) ----

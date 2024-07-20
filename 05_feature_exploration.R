@@ -102,6 +102,39 @@ gp_f2f_same_day_fourier_tbl %>%
         .show_summary = TRUE
     )
 
+## explore using lagged terms - assume 8 week forecast horizon ie. 40 observations
+# visualise 
+
+gp_f2f_same_day_fourier_tbl %>%
+    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .lags = 40:260)
+
+# prep data
+gp_f2f_same_day_lags_tbl <- 
+    gp_f2f_same_day_fourier_tbl %>% 
+    tk_augment_lags(.value = appointments, .lags = c(40, 65, 70)) %>% 
+    drop_na()
+    
+gp_f2f_same_day_lags_tbl %>% 
+    glimpse()
+
+# model
+gp_f2f_same_day_lags_tbl %>% 
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + .,
+        .show_summary = TRUE
+    )
+
+# compare to previous using filtered data to match time stamps
+gp_f2f_same_day_fourier_tbl %>% 
+    filter_by_time(.date_var = appointment_date, .start_date = "2020-12-08") %>% 
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + .,
+        .show_summary = TRUE
+    )
+
+
 
 # Cross Correlation (CCF) ----
 

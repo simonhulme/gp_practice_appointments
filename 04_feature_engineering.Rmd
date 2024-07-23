@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "Feature Engineering"
 output: html_notebook
 ---
 
@@ -10,5 +10,214 @@ library(modeltime)
 library(timetk)
 
 # Read in raw Data
-all_appointments <- read_rds("00_data/processed/wakefield_calendar_adj.rds")
+all_appointments <- read_rds("00_data/processed/wakefield_daily_corrected_tbl.rds")
+```
+
+# Create Time Series
+
+```{r}
+gp_f2f_same_day_tbl <-
+    all_appointments %>%
+    filter(hcp_type == "GP", 
+           appt_mode == "Face-to-Face",
+           appt_status == "Attended", time_between_book_and_appt == "Same Day") %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-07-20") %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    )
+```
+
+# GP f2f same day with time-based features
+
+```{r}
+gp_f2f_same_day_time_feats_tbl <-
+    gp_f2f_same_day_tbl %>%
+    tk_augment_timeseries_signature(.date_var = appointment_date)
+
+# visualise
+gp_f2f_same_day_time_feats_tbl %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = appointments,
+        .title = "Total Same Day Face-to-Face GP Appointments Attended\nPost Pandemic Time Series",
+        .y_lab = "Appointments",
+        .smooth = FALSE
+    )
+```
+
+## Out of the box model
+
+```{r}
+gp_f2f_same_day_time_feats_tbl %>%
+    plot_time_series_regression(.date_var = appointment_date,
+                                .formula = appointments ~ . - appointment_date,
+                                .show_summary = TRUE)
+```
+
+## Model using selected features
+
+### Trend
+
+```{r}
+# loess smoothed
+gp_f2f_same_day_time_feats_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ smooth_vec(appointments, span = 0.75, degree = 2),
+        .show_summary = TRUE
+    )
+```
+
+```{r}
+# linear trend
+gp_f2f_same_day_time_feats_tbl %>%
+    plot_time_series_regression(.date_var = appointment_date,
+                                .formula = appointments ~ index.num,
+                                .show_summary = TRUE)
+```
+
+```{r}
+# non-linear trends
+## polynomial
+gp_f2f_same_day_time_feats_tbl %>%
+    plot_time_series_regression(.date_var = appointment_date,
+                                .formula = appointments ~ poly(index.num, 4),
+                                .show_summary = TRUE)
+
+## natural spline
+gp_f2f_same_day_time_feats_tbl %>%
+    plot_time_series_regression(.date_var = appointment_date,
+                                .formula = appointments ~ splines::ns(index.num, df = 4),
+                                .show_summary = TRUE)
+```
+
+### Non-linear trend plus seasonality
+
+```{r}
+## natural spline plus week day and month
+gp_f2f_same_day_time_feats_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
+        .show_summary = TRUE
+    )
+```
+
+#### Fit model and explore residuals
+
+```{r}
+trend_season_mdl <- 
+    lm(appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
+       gp_f2f_same_day_time_feats_tbl)
+
+## Explore results
+trend_season_results <- 
+    gp_f2f_same_day_time_feats_tbl %>% 
+    select(appointment_date, .observed = appointments) %>% 
+    broom::augment(trend_season_mdl, data = .) %>% 
+    mutate(.resid = .observed - .fitted)
+
+trend_season_results %>% 
+    select(.resid) %>% 
+    ggplot(aes(.resid)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "grey30") +
+    theme_bw()
+
+trend_season_results %>% 
+    select(.observed, .fitted) %>% 
+    ggplot(aes(.observed, .fitted)) +
+    geom_point(alpha = 0.5) +
+    geom_abline() +
+    theme_bw()
+
+trend_season_results %>% 
+    select(.fitted, .std.resid) %>% 
+    ggplot(aes(.fitted, .std.resid)) +
+    geom_point(alpha = 0.5) +
+    geom_hline(yintercept = 0) +
+    theme_bw()
+
+trend_season_results %>% 
+    select(appointment_date, .std.resid) %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .value = .std.resid, .lags = 365)
+
+# has issues modelling observed values of zero
+# over estimates lower observed values and under estimates higher
+```
+
+# Handling Autocorrelation
+
+```{r}
+trend_season_results %>% 
+    select(appointment_date, .std.resid) %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .value = .std.resid, .lags = 365)
+
+gp_f2f_same_day_time_feats_tbl %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .lags = 365)
+
+## from residuals there is potential autocorrelation at lags 2 and 6
+```
+
+Add in some lagged terms for model although in real life this would be better captured using a time series model such as ARIMA. Using lagged terms limits ability of model to provide forecasts with small lags and reduces data to model with if large lags. Another option is to use fourier terms
+
+```{r}
+gp_f2f_same_day_time_feats_lagged_tbl <- 
+    gp_f2f_same_day_time_feats_tbl %>% 
+    select(appointment_date, appointments, index.num, year, month.lbl, day, wday.lbl) %>% 
+    tk_augment_lags(.value = appointments, .lags = c(2, 6, 7))
+
+gp_f2f_same_day_time_feats_lagged_tbl %>% glimpse()
+```
+
+```{r}
+gp_f2f_same_day_time_feats_lagged_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl +
+            appointments_lag2 + appointments_lag6 + appointments_lag7,
+        .show_summary = TRUE
+    )
+```
+
+```{r}
+trend_season_lags_mdl <-
+    lm(
+        appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_lag2 +
+            appointments_lag6 +appointments_lag7,
+        gp_f2f_same_day_time_feats_lagged_tbl
+    )
+
+## Explore results
+trend_season_results <- 
+    gp_f2f_same_day_time_feats_lagged_tbl %>% 
+    drop_na() %>% 
+    select(appointment_date, .observed = appointments) %>% 
+    broom::augment(trend_season_lags_mdl, data = .) %>% 
+    mutate(.resid = .observed - .fitted)
+
+trend_season_results %>% 
+    select(.resid) %>% 
+    ggplot(aes(.resid)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "grey30") +
+    theme_bw()
+
+trend_season_results %>% 
+    select(.observed, .fitted) %>% 
+    ggplot(aes(.observed, .fitted)) +
+    geom_point(alpha = 0.5) +
+    geom_abline() +
+    theme_bw()
+
+trend_season_results %>% 
+    select(.fitted, .std.resid) %>% 
+    ggplot(aes(.fitted, .std.resid)) +
+    geom_point(alpha = 0.5) +
+    geom_hline(yintercept = 0) +
+    theme_bw()
+
+trend_season_results %>% 
+    select(appointment_date, .std.resid) %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .value = .std.resid, .lags = 365)
 ```

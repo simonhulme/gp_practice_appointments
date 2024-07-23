@@ -1,152 +1,356 @@
 # Initial Modelling and Exploration
 
+## Use a linear regression model along with a variety of feature engineering techniques:
+
+## * trends - linear and non-linear
+## * seasonality 
+## * other time based features 
+## * fourier terms
+## * lagged dependent variable
+## * event data
+## * external regressors
+
+## Focus on most relevant subset of the data: GP appointments
+## - look at total, same day and advanced booking separately
+## - combine face-to-face, telephone, and video/online to reflect in surgery workload
+
+# Set Up ----
+
+# Libraries
 library(tidyverse)
 library(modeltime)
 library(timetk)
-library(forecast)
 
-all_appointments <- read_rds("00_data/processed/wakefield_calendar_population_workforce.rds")
+# Raw Data
+all_appointments <- read_rds("00_data/processed/wakefield_calendar_adj.rds")
 
-same_day_vs_advance_daily_tbl <-
+# Produce times series data ----
+
+## Start with total in surgery GP appointments booked (ie capacity needed to handle workload)
+gp_appts_daily_total_tbl <-
     all_appointments %>%
-    filter(hcp_type %in% c("GP", "Other Practice staff") ,
-           time_between_book_and_appt != "Unknown") %>%
-    mutate(booking =
-               if_else(time_between_book_and_appt == "Same Day", "Same Day", "Advance")) %>%
-    group_by(hcp_type, booking, appt_mode) %>%
+    filter(hcp_type == "GP", !appt_mode %in% c("Home Visit", "Unknown")) %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-07-20") %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
         appointments = sum(count_of_appointments)
-    ) %>%
-    ungroup()
+    )
 
-gp_f2f_same_day_appointments <-
-    all_appointments %>%
-    filter(
-        hcp_type == "GP",
-        appt_mode == "Face-to-Face",
-        appt_status == "Attended",
-        time_between_book_and_appt == "Same Day"
-    ) %>% 
-    select(-c(hcp_type, contains("appt"))) %>% 
-    mutate(across(where(is.numeric), ~ box_cox_vec(.x) %>% standardize_vec))
+## Visualise time series data ----
+gp_appts_daily_total_tbl %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Total GP Appointments Booked - Post Pandemic Time Series",
+                     .y_lab = "Appointments")
 
-gp_f2f_same_day_appointments %>% 
-    select(appointment_date, count_of_appointments) %>% 
-    plot_time_series(.date_var = appointment_date, .value = count_of_appointments)
+## LOESS smoother suggests appt trend fairly flat until Jan 23 then a fall then maybe a slight increase
+## This may be due to increase in appts with other staff 
+## Consider external features to represent appt volume and workforce 
+## also consider non linear method to model trend
+## two sets of troughs - to zero (holiday) and not to zero (training)
+## may need external categorical features to model periodicity which does not appear to be regular
+
+## Model Time Based Features ----
+gp_appts_time_signature_tbl <- 
+    gp_appts_daily_total_tbl %>% 
+    tk_augment_timeseries_signature(.date_var = appointment_date)
     
-gp_f2f_same_day_signature_tbl <- 
-    gp_f2f_same_day_appointments %>% 
-    summarise_by_time(.date_var = appointment_date, .by = "day", appointments = mean(count_of_appointments, na.rm = TRUE)) %>% 
-    select(appointment_date, appointments) %>% 
-    tk_augment_timeseries_signature(.date_var = appointment_date) %>% 
-    select(-diff, -matches("iso|xts"), -c(hour:am.pm)) %>% 
-    mutate(appointments = box_cox_vec(appointments))
+# Explore linear regression using time based features
 
-# ** Linear Trend
-gp_f2f_same_day_signature_tbl %>%
+## Model trend
+
+### Linear trend
+g <-
+    gp_appts_time_signature_tbl %>%
+    mutate(appointments_smooth = smooth_vec(appointments)) %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         .formula = appointments ~ index.num,
-        .show_summary = TRUE
+        .show_summary = TRUE,
+        .interactive = FALSE
+    ) +
+    geom_line(
+        data = gp_appts_time_signature_tbl %>% 
+            mutate(appointments_smooth = smooth_vec(appointments, span = 0.75)),
+        aes(y = appointments_smooth),
+        color = "blue"
     )
 
-# ** Non-linear Trend - Splines
-gp_f2f_same_day_signature_tbl %>%
+plotly::ggplotly(g)
+
+### Non linear 
+#### Polynomial - 2nd degree
+g <- 
+    gp_appts_time_signature_tbl %>%
+    mutate(appointments_smooth = smooth_vec(appointments)) %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ splines::bs(index.num, degree = 4),
-        .show_summary = TRUE
+        .formula = appointments ~ poly(index.num, 2),
+        .show_summary = TRUE,
+        .interactive = FALSE
+    ) +
+    geom_line(
+        data = gp_appts_time_signature_tbl %>% 
+            mutate(appointments_smooth = smooth_vec(appointments, span = 0.75)),
+        aes(y = appointments_smooth),
+        color = "blue"
     )
 
-gp_f2f_same_day_signature_tbl %>%
+plotly::ggplotly(g)
+
+#### Polynomial - 3rd degree
+g <- 
+    gp_appts_time_signature_tbl %>%
+    mutate(appointments_smooth = smooth_vec(appointments)) %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ poly(index.num, 3),
+        .show_summary = TRUE,
+        .interactive = FALSE
+    ) +
+    geom_line(
+        data = gp_appts_time_signature_tbl %>% 
+            mutate(appointments_smooth = smooth_vec(appointments, span = 0.75)),
+        aes(y = appointments_smooth),
+        color = "blue"
+    )
+
+plotly::ggplotly(g)
+
+#### Splines: Natural
+g <- 
+    gp_appts_time_signature_tbl %>% 
     plot_time_series_regression(
         .date_var = appointment_date,
         .formula = appointments ~ splines::ns(index.num, df = 4),
-        .show_summary = TRUE
+        .show_summary = TRUE,
+        .interactive = FALSE
+    ) +
+    geom_line(
+        data = gp_appts_time_signature_tbl %>% 
+            mutate(appointments_smooth = smooth_vec(appointments, span = 0.75)),
+        aes(y = appointments_smooth),
+        color = "blue"
     )
 
-# Seasonality ----
-gp_f2f_same_day_signature_tbl %>%
+plotly::ggplotly(g)
+
+## Model seasonality
+
+gp_appts_time_signature_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         .formula = appointments ~ wday.lbl,
         .show_summary = TRUE
     )
 
-gp_f2f_same_day_signature_tbl %>%
+gp_appts_time_signature_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         .formula = appointments ~ month.lbl,
         .show_summary = TRUE
     )
 
-## Combining trend and seasonality
-gp_f2f_same_day_signature_tbl %>%
+## Combine trend and seasonality
+
+### linear trend
+gp_appts_time_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ index.num + wday.lbl + month.lbl,
+        .show_summary = TRUE
+    )
+
+### polynomial trend
+gp_appts_time_signature_tbl %>%
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ poly(index.num, 3) + wday.lbl + month.lbl,
+        .show_summary = TRUE
+    )
+
+### natural splines 
+gp_appts_time_signature_tbl %>% 
     plot_time_series_regression(
         .date_var = appointment_date,
         .formula = appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
         .show_summary = TRUE
     )
 
-## adding in fourier terms
-gp_f2f_same_day_fourier_tbl <- 
-    gp_f2f_same_day_signature_tbl %>% 
-    tk_augment_fourier(.date_var = appointment_date, .periods = c(260))
+#### low R2 values - high variance so apply box cox transformation to dependent variable
+gp_appts_daily_total_tbl %>% 
+    plot_time_series(.date_var = appointment_date, .value = box_cox_vec(appointments + 1))
 
-gp_f2f_same_day_fourier_tbl %>% 
+gp_appts_time_signature_boxcox_tbl <- 
+    gp_appts_time_signature_tbl %>% 
+    mutate(appointments_trans =  box_cox_vec(appointments + 1) %>% normalize_vec)
+
+gp_appts_time_signature_boxcox_tbl %>% 
+    plot_time_series(.date_var = appointment_date, .value = appointments_trans)
+
+### re run best model so far
+gp_appts_time_signature_boxcox_tbl %>% 
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ splines::ns(index.num, df = 4) + .,
+        .formula = appointments_trans ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
         .show_summary = TRUE
     )
 
-## explore using lagged terms - assume 8 week forecast horizon ie. 40 observations
-# visualise 
+## Explore autocorrelation
+gp_appts_time_signature_boxcox_tbl %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments_trans, .lags = 262)
 
-gp_f2f_same_day_fourier_tbl %>%
-    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .lags = 40:260)
+## evidence of order 1 autoregression - ideally model using ARIMA but in exploratory analysis
+## model using lagged term.
+## run model so far and explore residuals
 
-# prep data
-gp_f2f_same_day_lags_tbl <- 
-    gp_f2f_same_day_fourier_tbl %>% 
-    tk_augment_lags(.value = appointments, .lags = c(40, 65, 70)) %>% 
+## create linear model
+
+lm_fit_1 <-
+    lm(
+        formula = appointments_trans ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
+        data = gp_appts_time_signature_boxcox_tbl
+    )
+
+summary(lm_fit_1)
+anova(lm_fit_1)
+
+residuals(lm_fit_1) %>% hist()
+
+fitted_model <- 
+    broom::augment(lm_fit_1, gp_appts_time_signature_boxcox_tbl %>% select(appointment_date, appointments_trans))
+
+fitted_model %>% 
+    ggplot(aes(.fitted, appointments_trans)) +
+    geom_point() +
+    geom_abline() +
+    theme_bw()
+
+fitted_model %>% 
+    plot_time_series(.date_var = appointment_date, .resid)
+
+fitted_model %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .resid, .lags = 20)
+
+
+## add in lag1 terms
+gp_appts_lagged_dependent_tbl <- 
+    gp_appts_time_signature_boxcox_tbl %>% 
+    tk_augment_lags(.value = appointments_trans, .lags = 1) %>% 
     drop_na()
     
-gp_f2f_same_day_lags_tbl %>% 
-    glimpse()
-
-# model
-gp_f2f_same_day_lags_tbl %>% 
+gp_appts_lagged_dependent_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ splines::ns(index.num, df = 4) + .,
+        .formula = 
+            appointments_trans ~ 
+            splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_trans_lag1,
         .show_summary = TRUE
     )
 
-# compare to previous using filtered data to match time stamps
-gp_f2f_same_day_fourier_tbl %>% 
-    filter_by_time(.date_var = appointment_date, .start_date = "2020-12-08") %>% 
+# revise model to include lagged terms
+
+lm_fit_2 <-
+    lm(appointments_trans ~ 
+            splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_trans_lag1,
+        data = gp_appts_lagged_dependent_tbl
+    )
+
+summary(lm_fit_2)
+anova(lm_fit_2)
+
+residuals(lm_fit_2) %>% hist()
+
+fitted_model <- 
+    broom::augment(lm_fit_2, gp_appts_lagged_dependent_tbl %>% select(appointment_date, appointments_trans))
+
+fitted_model %>% 
+    ggplot(aes(.fitted, appointments_trans)) +
+    geom_point() +
+    geom_abline() +
+    theme_bw()
+
+fitted_model %>% 
+    plot_time_series(.date_var = appointment_date, .resid)
+
+fitted_model %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .resid, .lags = 260)
+
+## adding in fourier terms to handle annual pattern
+
+gp_appts_lagged_dependent_tbl %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, appointments_trans, .lags = 261)
+
+gp_appts_fourier_tbl <- 
+    gp_appts_lagged_dependent_tbl %>% 
+    tk_augment_fourier(.date_var = appointment_date, .periods = c(260))
+
+gp_appts_fourier_tbl %>% glimpse()
+
+gp_appts_fourier_tbl %>% 
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ splines::ns(index.num, df = 4) + .,
+        .formula = 
+            appointments_trans ~ 
+            splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_trans_lag1 + 
+            appointment_date_sin260_K1 + appointment_date_cos260_K1,
         .show_summary = TRUE
     )
+
+## revise linear model again
+
+lm_fit_3 <-
+    lm(formula = 
+           appointments_trans ~ 
+           splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_trans_lag1 + 
+           appointment_date_sin260_K1 + appointment_date_cos260_K1,
+       data = gp_appts_fourier_tbl
+    )
+
+summary(lm_fit_3)
+anova(lm_fit_3)
+
+residuals(lm_fit_3) %>% hist()
+
+fitted_model <- 
+    broom::augment(lm_fit_3, gp_appts_fourier_tbl %>% select(appointment_date, appointments_trans))
+
+fitted_model %>% 
+    ggplot(aes(.fitted, appointments_trans)) +
+    geom_point() +
+    geom_abline() +
+    theme_bw()
+
+fitted_model %>% 
+    plot_time_series(.date_var = appointment_date, .resid)
+
+fitted_model %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .resid, .lags = 260)
+
 
 ## modelling events
 
-gp_f2f_same_day_events_tbl <- 
-    gp_f2f_same_day_fourier_tbl %>% 
-    left_join(gp_f2f_same_day_appointments) %>% 
-    select(-c(contains("total"), registered_population, count_of_appointments, pandemic))
+events <- 
+    all_appointments %>% 
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-07-20") %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        holiday = first(holiday),
+        training = first(training)
+    )
 
-gp_f2f_same_day_events_tbl %>% glimpse()
+gp_appts_events_tbl <- 
+    gp_appts_fourier_tbl %>% 
+    left_join(events) 
+
+gp_appts_events_tbl %>% glimpse()
 
 ## visualising events
 
 g <- 
-    gp_f2f_same_day_events_tbl %>%
+    gp_appts_events_tbl %>%
     plot_time_series(
         .date_var = appointment_date,
         .value = appointments,
@@ -161,12 +365,51 @@ g <-
 plotly::ggplotly(g)
 
 ## model events and re-visualise
-gp_f2f_same_day_events_tbl %>%
+gp_appts_events_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ splines::ns(index.num, df = 3) + .,
+        .formula = appointments_trans ~ 
+            splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_trans_lag1 + 
+            appointment_date_sin260_K1 + appointment_date_cos260_K1 + holiday + training,
         .show_summary = TRUE
     )
+
+## revise linear model again
+
+lm_fit_4 <-
+    lm(formula = 
+           appointments_trans ~ 
+           splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_trans_lag1 + 
+           appointment_date_sin260_K1 + appointment_date_cos260_K1 + holiday + training,
+       data = gp_appts_events_tbl
+    )
+
+summary(lm_fit_4)
+anova(lm_fit_4)
+
+residuals(lm_fit_4) %>% hist()
+
+fitted_model <- 
+    broom::augment(lm_fit_4, gp_appts_events_tbl %>% select(appointment_date, appointments_trans))
+
+fitted_model %>% 
+    ggplot(aes(.fitted, appointments_trans)) +
+    geom_point(alpha = 0.5) +
+    geom_abline() +
+    theme_bw()
+
+fitted_model %>% 
+    plot_time_series(.date_var = appointment_date, .resid)
+
+fitted_model %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .resid, .lags = 260)
+
+
+
+
+
+
+
 
 ## add in terms to account for lagged events
 gp_f2f_same_day_events_with_lags_tbl <- 
@@ -275,114 +518,6 @@ hcp_booking_type_wide_tbl %>%
 
 
 
-
-
-
-
-
-
-# Variance Reduction ----
-
-## No transformation ----
-
-gp_f2f_same_day_appointments %>%
-    plot_time_series(.date_var = appointment_date,
-                     .value = count_of_appointments,
-                     .smooth_period = "12 months")
-
-gp_f2f_same_day_appointments %>% 
-    plot_time_series_regression(
-        appointment_date,
-        count_of_appointments ~ 
-            wday(appointment_date, label = TRUE) +
-            month(appointment_date, label = TRUE) +
-            year(appointment_date) +
-            registered_population +
-            total_gp +
-            total_nurse +
-            total_dpc +
-            holiday +
-            training +
-            pandemic,
-        .show_summary = TRUE
-    )
-
-## heteroskedasticity: variance increases with time
-
-## Log transformation of response ----
-
-gp_f2f_same_day_appointments %>%
-    plot_time_series(.date_var = appointment_date,
-                     .value = log1p(count_of_appointments))
-
-gp_f2f_same_day_appointments %>% 
-    plot_time_series_regression(
-        appointment_date,
-        log1p(count_of_appointments) ~ 
-            wday(appointment_date, label = TRUE) +
-            month(appointment_date, label = TRUE) +
-            year(appointment_date) +
-            registered_population +
-            holiday +
-            training +
-            pandemic,
-        .show_summary = TRUE,
-        .interactive  = TRUE
-    )
-
-## log transformation appears to model past data well
-
-# Rolling and Smoothing ----
-
-## Sliding / Rolling Functions ----
-
-gp_f2f_same_day_appointments %>%
-    mutate(
-        count_of_appointments_rolling = count_of_appointments %>% slidify_vec(
-        .f = mean,
-        .period = 130,
-        .align = "center", .partial = TRUE
-    )) %>%
-    pivot_longer(cols = contains("count_of_appointments"), names_to = "type") %>% 
-    plot_time_series(
-        .date_var = appointment_date,
-        .value = value,
-        .color_var = type,
-        .smooth = FALSE
-    )
-
-## LOESS Smoother ----
-
-gp_f2f_same_day_appointments %>%
-    mutate(
-        count_of_appointments_smooth = count_of_appointments %>% 
-            smooth_vec(
-                period = 260
-            )) %>%
-    pivot_longer(cols = contains("count_of_appointments"), names_to = "type") %>% 
-    plot_time_series(
-        .date_var = appointment_date,
-        .value = value,
-        .color_var = type,
-        .smooth = FALSE
-    )
-
-## Moving Average Forecasting ----
-
-gp_f2f_same_day_appointments %>%
-    mutate(mavg_8 = slidify_vec(
-        count_of_appointments,
-        ~ median(.x, na.rm = TRUE),
-        .period = 60,
-        .align = "right"
-    )) %>% 
-    bind_rows(
-        future_frame(., .length_out = 60)
-    ) %>% 
-    fill(mavg_8, .direction = "down") %>%
-    pivot_longer(cols = c(count_of_appointments, mavg_8)) %>% 
-    select(appointment_date, name, value) %>% 
-    plot_time_series(appointment_date, .value = value, .color_var = name, .smooth = FALSE)
 
 # Range Reduction ----
 

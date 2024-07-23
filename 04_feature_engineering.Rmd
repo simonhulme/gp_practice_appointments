@@ -1,0 +1,14 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# Load libraries
+library(tidyverse)
+library(modeltime)
+library(timetk)
+
+# Read in raw Data
+all_appointments <- read_rds("00_data/processed/wakefield_calendar_adj.rds")
+```

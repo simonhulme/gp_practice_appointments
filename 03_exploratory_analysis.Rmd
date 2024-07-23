@@ -7,7 +7,7 @@ output: html_notebook
 library(tidyverse)
 library(timetk)
 
-wakefield_daily <- read_rds("00_data/processed/wakefield_daily_tbl.rds")
+wakefield_daily <- read_rds("00_data/processed/wakefield_daily_corrected_tbl.rds")
 ```
 
 # Summary Statistics
@@ -23,6 +23,88 @@ skimr::skim(wakefield_daily)
 -   4 categorical variables (nominal)
 
 # Exploratory Visualisation
+
+## Distribution of response value
+
+### Total appointments
+
+```{r}
+# overall
+total_appointments <- 
+    wakefield_daily %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        total_appointments = sum(count_of_appointments)
+    )
+
+total_appointments %>% 
+    ggplot(aes(total_appointments)) +
+    geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    labs(title = "Bimodal distribution due to zero values for holidays and weekends")
+
+total_appointments %>% 
+    filter(total_appointments > 0) %>% 
+    ggplot(aes(total_appointments)) +
+    geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    labs(title = "Approximately normal distribution when zero values omitted")
+
+total_appointments %>% 
+    filter(total_appointments > 0) %>%  
+    finalfit::ff_glimpse()
+```
+
+### By Health Care Professional
+
+#### GP
+
+```{r}
+gp_appointments <- 
+    wakefield_daily %>%
+    filter(hcp_type == "GP") %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        total_appointments = sum(count_of_appointments)
+    )
+
+gp_appointments %>% 
+    filter(total_appointments > 0) %>% 
+    ggplot(aes(total_appointments)) +
+    geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    labs(title = "Approximately normal distribution when zero values omitted")
+
+gp_appointments %>% 
+    filter(total_appointments > 0) %>% 
+    finalfit::ff_glimpse()
+```
+
+#### Other Practice Staff
+
+```{r}
+other_appointments <- 
+    wakefield_daily %>%
+    filter(hcp_type == "Other Practice staff") %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        total_appointments = sum(count_of_appointments)
+    )
+
+other_appointments %>% 
+    filter(total_appointments > 0) %>% 
+    ggplot(aes(total_appointments)) +
+    geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    labs(title = "Approximately normal distribution when zero values omitted")
+
+other_appointments %>% 
+    filter(total_appointments > 0) %>% 
+    finalfit::ff_glimpse()
+```
 
 ## Total Appointments by Feature
 

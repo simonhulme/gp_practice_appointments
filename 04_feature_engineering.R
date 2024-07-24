@@ -340,12 +340,6 @@ hcp_booking_type_wide_tbl %>%
 
 
 
-
-
-
-
-
-
 # Range Reduction ----
 
 # FTE Staff

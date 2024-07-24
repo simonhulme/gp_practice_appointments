@@ -3,7 +3,7 @@ title: "Feature Engineering"
 output: html_notebook
 ---
 
-```{r}
+```{r message=FALSE}
 # Load libraries
 library(tidyverse)
 library(modeltime)
@@ -15,12 +15,19 @@ all_appointments <- read_rds("00_data/processed/wakefield_daily_corrected_tbl.rd
 
 # Create Time Series
 
+Decisions made:
+
+Time period: Use post pandemic data as model to be used in recovery and post pandemic phase rather then modelling the impact of a pandemic.
+
+GP: Other Practice staff heterogeneous group that is not sub-divided into professions. GP more straightforward to model using the available data
+
+Attended: Reflects actual daily workload
+
 ```{r}
-gp_f2f_same_day_tbl <-
+gp_appts_tbl <-
     all_appointments %>%
-    filter(hcp_type == "GP", 
-           appt_mode == "Face-to-Face",
-           appt_status == "Attended", time_between_book_and_appt == "Same Day") %>%
+    filter(hcp_type == "GP",
+           appt_status == "Attended") %>%
     filter_by_time(.date_var = appointment_date, .start_date = "2021-07-20") %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -29,92 +36,86 @@ gp_f2f_same_day_tbl <-
     )
 ```
 
-# GP f2f same day with time-based features
+### Visualise Time Series
 
 ```{r}
-gp_f2f_same_day_time_feats_tbl <-
-    gp_f2f_same_day_tbl %>%
-    tk_augment_timeseries_signature(.date_var = appointment_date)
+gp_appts_tbl %>% 
+    plot_time_series(.date_var = appointment_date, .value = appointments, .smooth_period = "12 months")
 
-# visualise
-gp_f2f_same_day_time_feats_tbl %>%
-    plot_time_series(
+gp_appts_tbl %>%
+    plot_stl_diagnostics(
         .date_var = appointment_date,
         .value = appointments,
-        .title = "Total Same Day Face-to-Face GP Appointments Attended\nPost Pandemic Time Series",
-        .y_lab = "Appointments",
-        .smooth = FALSE
+        .feature_set = c("season", "trend", "remainder"), .trend = "12 months"
     )
+```
+
+# Explore time based features
+
+```{r}
+gp_time_feats_tbl <-
+    gp_appts_tbl %>%
+    tk_augment_timeseries_signature(.date_var = appointment_date)
 ```
 
 ## Out of the box model
 
 ```{r}
-gp_f2f_same_day_time_feats_tbl %>%
+gp_time_feats_tbl %>%
     plot_time_series_regression(.date_var = appointment_date,
                                 .formula = appointments ~ . - appointment_date,
                                 .show_summary = TRUE)
 ```
 
-## Model using selected features
+The assessment of feature contributions in this linear model is challenging due to multicollinearity, which results in several coefficients not being defined because of singularities. Multicollinearity can lead to:
 
-### Trend
+-   **Unstable and Unreliable Coefficient Estimates**: Small changes in the data can cause large variations in the estimated coefficients, making them difficult to interpret.
 
-```{r}
-# loess smoothed
-gp_f2f_same_day_time_feats_tbl %>%
-    plot_time_series_regression(
-        .date_var = appointment_date,
-        .formula = appointments ~ smooth_vec(appointments, span = 0.75, degree = 2),
-        .show_summary = TRUE
-    )
-```
+-   **Inflated Standard Errors**: This inflation increases the standard errors of the coefficients, which, in turn, affects the t-values and p-values, potentially masking the true significance of the predictors.
+
+Consequently, multicollinearity not only obscures the individual contributions of features but also undermines the reliability of the model's statistical inferences.
+
+## Model using selected time based features
+
+Time series models can be decomposed into trend and seasonal components. This can be achieved by regressing response on time based features although issues with lack of independence of observations and autocorrelation in residuals will impact the validity and reliability of this method
 
 ```{r}
-# linear trend
-gp_f2f_same_day_time_feats_tbl %>%
+# linear trend with seasonality
+gp_time_feats_tbl %>%
     plot_time_series_regression(.date_var = appointment_date,
-                                .formula = appointments ~ index.num,
+                                .formula = appointments ~ index.num + wday.lbl + month.lbl,
                                 .show_summary = TRUE)
 ```
 
 ```{r}
-# non-linear trends
-## polynomial
-gp_f2f_same_day_time_feats_tbl %>%
+# non-linear: polynomial
+gp_time_feats_tbl %>%
     plot_time_series_regression(.date_var = appointment_date,
-                                .formula = appointments ~ poly(index.num, 4),
-                                .show_summary = TRUE)
-
-## natural spline
-gp_f2f_same_day_time_feats_tbl %>%
-    plot_time_series_regression(.date_var = appointment_date,
-                                .formula = appointments ~ splines::ns(index.num, df = 4),
+                                .formula = appointments ~ poly(index.num, 4) + wday.lbl + month.lbl,
                                 .show_summary = TRUE)
 ```
-
-### Non-linear trend plus seasonality
 
 ```{r}
-## natural spline plus week day and month
-gp_f2f_same_day_time_feats_tbl %>%
-    plot_time_series_regression(
-        .date_var = appointment_date,
-        .formula = appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
-        .show_summary = TRUE
-    )
+## non-linear: natural spline
+gp_time_feats_tbl %>%
+    plot_time_series_regression(.date_var = appointment_date,
+                                .formula = appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
+                                .show_summary = TRUE)
 ```
 
-#### Fit model and explore residuals
+This model accounts for trend and seasonality.
+
+Next step is to build this model and explore its residuals to identify what other features may be needed
 
 ```{r}
 trend_season_mdl <- 
-    lm(appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl,
-       gp_f2f_same_day_time_feats_tbl)
+    lm(formula = appointments ~ poly(index.num, 4) + wday.lbl + month.lbl, data = gp_time_feats_tbl)
+
+summary(trend_season_mdl)
 
 ## Explore results
 trend_season_results <- 
-    gp_f2f_same_day_time_feats_tbl %>% 
+    gp_time_feats_tbl %>% 
     select(appointment_date, .observed = appointments) %>% 
     broom::augment(trend_season_mdl, data = .) %>% 
     mutate(.resid = .observed - .fitted)
@@ -154,29 +155,28 @@ trend_season_results %>%
     select(appointment_date, .std.resid) %>% 
     plot_acf_diagnostics(.date_var = appointment_date, .value = .std.resid, .lags = 365)
 
-gp_f2f_same_day_time_feats_tbl %>% 
+gp_time_feats_tbl %>% 
     plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .lags = 365)
-
-## from residuals there is potential autocorrelation at lags 2 and 6
 ```
 
 Add in some lagged terms for model although in real life this would be better captured using a time series model such as ARIMA. Using lagged terms limits ability of model to provide forecasts with small lags and reduces data to model with if large lags. Another option is to use fourier terms
 
 ```{r}
-gp_f2f_same_day_time_feats_lagged_tbl <- 
-    gp_f2f_same_day_time_feats_tbl %>% 
+gp_time_feats_lags_tbl <- 
+    gp_time_feats_tbl %>% 
     select(appointment_date, appointments, index.num, year, month.lbl, day, wday.lbl) %>% 
-    tk_augment_lags(.value = appointments, .lags = c(2, 6, 7))
+    tk_augment_lags(.value = appointments, .lags = c(1:7))
 
-gp_f2f_same_day_time_feats_lagged_tbl %>% glimpse()
+gp_time_feats_lags_tbl %>% glimpse()
 ```
 
 ```{r}
-gp_f2f_same_day_time_feats_lagged_tbl %>%
+gp_time_feats_lags_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
-        .formula = appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl +
-            appointments_lag2 + appointments_lag6 + appointments_lag7,
+        .formula = appointments ~ poly(index.num, 4) + wday.lbl + month.lbl + appointments_lag1 +
+            appointments_lag2 + appointments_lag3 + appointments_lag4 + appointments_lag5 +
+            appointments_lag6 + appointments_lag7,
         .show_summary = TRUE
     )
 ```
@@ -184,14 +184,17 @@ gp_f2f_same_day_time_feats_lagged_tbl %>%
 ```{r}
 trend_season_lags_mdl <-
     lm(
-        appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl + appointments_lag2 +
-            appointments_lag6 +appointments_lag7,
-        gp_f2f_same_day_time_feats_lagged_tbl
+        appointments ~ poly(index.num, 4) + wday.lbl + month.lbl + appointments_lag1 +
+            appointments_lag2 + appointments_lag3 + appointments_lag4 + appointments_lag5 +
+            appointments_lag6 + appointments_lag7,
+        gp_time_feats_lags_tbl
     )
+
+summary(trend_season_lags_mdl)
 
 ## Explore results
 trend_season_results <- 
-    gp_f2f_same_day_time_feats_lagged_tbl %>% 
+    gp_time_feats_lags_tbl %>% 
     drop_na() %>% 
     select(appointment_date, .observed = appointments) %>% 
     broom::augment(trend_season_lags_mdl, data = .) %>% 
@@ -220,4 +223,8 @@ trend_season_results %>%
 trend_season_results %>% 
     select(appointment_date, .std.resid) %>% 
     plot_acf_diagnostics(.date_var = appointment_date, .value = .std.resid, .lags = 365)
+
+anova(trend_season_lags_mdl)
 ```
+
+Add in Events - Weekend, Bank Holidays, Training

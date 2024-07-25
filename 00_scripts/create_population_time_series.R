@@ -4,15 +4,18 @@ library(tidyverse)
 library(rvest)
 library(timetk)
 
+
 # Population ----
 
 ## Available monthly with files accessed from different web pages 
 ## Web pages have same base url but each ends with different month and year
 
-population_url <- 
+## Get URLs for webpages that link to datasets
+
+base_url <- 
     "https://digital.nhs.uk/data-and-information/publications/statistical/patients-registered-at-a-gp-practice/"
 
-dates <- seq.Date(from = as.Date("2019-05-01"), to = as.Date("2024-05-01"), by = "month")
+dates <- seq.Date(from = as.Date("2019-05-01"), to = as.Date("2024-07-01"), by = "month")
 
 convert_date <- function(date) {
     
@@ -24,11 +27,11 @@ convert_date <- function(date) {
     return(output)
 }
 
-dates_url <- map_chr(dates, convert_date)
+date_url <- map_chr(dates, convert_date)
 
-full_url <- paste0(population_url, dates_url)
+full_url <- paste0(base_url, date_url)
 
-## Extract address for data from each webpage 
+## Extract urls for data from each webpage 
 
 get_urls_for_data <- function(url) {
     
@@ -42,23 +45,93 @@ get_urls_for_data <- function(url) {
     return(data_url)
 }
 
-data_urls <- map(full_url, get_urls_for_registered_populations)
+data_urls <- map(full_url, get_urls_for_data)
 
-csv_urls <- urls[str_detect(data_urls, "csv")]
+## download data from csv files
 
-## download data using urls 
+csv_urls <- data_urls[str_detect(data_urls, "csv")]
 
-registered_population <-
-    map(csv_urls, read_csv) %>%
-    map( ~ .x %>% mutate(EXTRACT_DATE = dmy(EXTRACT_DATE))) %>%
-    reduce(bind_rows) %>%
-    janitor::clean_names() %>%
-    filter(sub_icb_location_code == "03R" | ccg_code == "03R") %>%
-    summarise_by_time(
-        .date_var = extract_date,
-        .by = "month",
-        registered_population = sum(number_of_patients)
-    )
+csv_files_downloaded <-
+    map(csv_urls, read_csv)
+
+## download data from zip files
+
+zip_urls <- data_urls[str_detect(data_urls, "zip")]
+
+get_csv_from_url_zip <- function(url) {
+    temporary_file <- tempfile()
+    
+    download.file(url, temporary_file)
+    
+    contents <- 
+        unzip(temporary_file, list = TRUE) %>% 
+        pull(Name) %>% 
+        str_subset("csv")
+    
+    data <- 
+        map(contents, ~ read_csv(unz(temporary_file, .x))) 
+    
+    return(data) 
+}
+
+zip_files_downloaded <- 
+    map(zip_urls, get_csv_from_url_zip) %>% 
+    flatten()
+
+## Join files together
+
+all_downloads <- 
+    append(csv_files_downloaded, zip_files_downloaded) 
+
+rename_columns <- function(df) {
+    if ("CCG_CODE" %in% names(df)) {
+        df <- df %>% rename(AREA_CODE = CCG_CODE)
+    }
+    if ("SUB_ICB_LOCATION_CODE" %in% names(df)) {
+        df <- df %>% rename(AREA_CODE = SUB_ICB_LOCATION_CODE)
+    }
+    if ("SUB_ICB_LOC_CODE" %in% names(df)) {
+        df <- df %>% rename(AREA_CODE = SUB_ICB_LOC_CODE)
+    }
+    
+    return(df)
+}
+
+reformat_dates <- function(df) {
+    if (is.character(df$EXTRACT_DATE)) {
+        df <- 
+            df %>% 
+            mutate(EXTRACT_DATE = mdy(EXTRACT_DATE))
+        return(df)
+    }
+    
+    return(df)
+    }
+                                      
+all_downloads <- map(all_downloads, rename_columns)
+
+wakefield_population <- 
+    all_downloads %>% map(~ filter(.x, AREA_CODE == "03R"))
+
+wakefield_population %>% 
+    map(reformat_dates)
+
+
+wakefield_population %>% map_chr(~.x$EXTRACT_DATE %>% head(1))
+
+
+wakefield_population[[12]]
+
+# csv_files_downloaded %>% 
+#     map( ~ .x %>% mutate(EXTRACT_DATE = dmy(EXTRACT_DATE))) %>%
+#     reduce(bind_rows) %>%
+#     janitor::clean_names() %>%
+#     filter(sub_icb_location_code == "03R" | ccg_code == "03R") %>%
+#     summarise_by_time(
+#         .date_var = extract_date,
+#         .by = "month",
+#         registered_population = sum(number_of_patients)
+#
 
 ## save data
 write_rds(registered_population, "00_data/processed/wakefield_population_monthly.rds")

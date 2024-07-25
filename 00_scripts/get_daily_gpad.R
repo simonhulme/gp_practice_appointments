@@ -4,14 +4,13 @@ library(tidyverse)
 library(timetk)
 
 get_daily_gpad <- function(url) {
-    # Extracts daily GP appointments data from NHS website
+    # Extracts daily GP appointments data from zipped csv files off NHS website
     
     # Inputs
-    # - url             : web address for data
-    # - location_code   : 3 digit sub icb location code
+    # - url             : web address for dataset
     
     # Output
-    # - list containing daily gp appointments data by month for all NHS areas in England
+    # - list of monthly data frames that contain data about GP appointments for all NHSE areas
     
     temporary_file <- tempfile()
     

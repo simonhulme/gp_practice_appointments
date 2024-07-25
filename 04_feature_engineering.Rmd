@@ -40,8 +40,6 @@ gp_appts_tbl <-
     left_join(events) %>% 
     filter(!weekend) %>% 
     select(-weekend, - pandemic)
-   
-gp_appts_tbl
 ```
 
 ### Visualise Time Series
@@ -65,18 +63,16 @@ Most striking features are weekly seasonality and events - bank holidays + train
 Start by modelling these and then adding in longer term seasonal features
 
 ```{r}
-time_feats_events_tbl <- 
+trend_season_events_tbl <- 
     gp_appts_tbl %>% 
     mutate(wday.lbl  = wday(appointment_date, label = TRUE),
            month.lbl = month(appointment_date, label = TRUE),
            index.num = as.numeric(appointment_date))
-
-time_feats_events_tbl
 ```
 
 ```{r}
 # weekly seasonality and events
-time_feats_events_tbl %>%
+trend_season_events_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         appointments ~ wday.lbl + bank_holiday + training,
@@ -86,7 +82,7 @@ time_feats_events_tbl %>%
 
 ```{r}
 # add monthly seasonality
-time_feats_events_tbl %>%
+trend_season_events_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         appointments ~ wday.lbl + month.lbl + bank_holiday + training,
@@ -94,28 +90,28 @@ time_feats_events_tbl %>%
     )
 ```
 
-Doesn't appear to be picking up trend
-
 ```{r}
-# add linear trend
-time_feats_events_tbl %>%
+# add trend
+
+## linear trend
+trend_season_events_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         appointments ~ index.num + wday.lbl + month.lbl + bank_holiday + training,
         .show_summary = TRUE
     )
 
-# add non linear trend - polynomial
-time_feats_events_tbl %>%
+## non-linear trend - polynomial
+trend_season_events_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         appointments ~ poly(index.num, 4) + wday.lbl + month.lbl + bank_holiday + training,
         .show_summary = TRUE
     )
 
-# add non linear trend - spline
+## non-linear trend - spline
 
-time_feats_events_tbl %>%
+trend_season_events_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl + bank_holiday + training,
@@ -123,134 +119,136 @@ time_feats_events_tbl %>%
     )
 ```
 
-This model accounts for trend and seasonality.
-
-Next step is to build this model and explore its residuals to identify what other features may be needed
-
 ```{r}
-trend_season_mdl <-
-    lm(
-        appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl + bank_holiday + training,
-        data = time_feats_events_tbl
-    )
+trend_season_event_mdl <-
+    lm(appointments ~ splines::ns(index.num, df = 4) + wday.lbl + month.lbl + bank_holiday + training,
+       data = trend_season_events_tbl)
 
-summary(trend_season_mdl)
+summary(trend_season_event_mdl)
 
 ## Explore results
-trend_season_results <- 
-    time_feats_events_tbl %>% 
+trend_season_event_results <- 
+    trend_season_events_tbl %>% 
     select(appointment_date, .observed = appointments, everything()) %>% 
-    broom::augment(trend_season_mdl, data = .) %>% 
-    mutate(.fitted = ifelse(bank_holiday, 0, .fitted)) %>% 
+    broom::augment(trend_season_event_mdl, data = .) %>% 
     mutate(.resid = .observed - .fitted)
 
-trend_season_results %>% 
+trend_season_event_results %>% 
     select(.resid) %>% 
     ggplot(aes(.resid)) +
     geom_histogram(bins = 30, fill = "skyblue", color = "grey30") +
     theme_bw()
 
-trend_season_results %>% 
+trend_season_event_results %>% 
     select(.observed, .fitted) %>% 
     ggplot(aes(.observed, .fitted)) +
     geom_point(alpha = 0.5) +
     geom_abline() +
     theme_bw()
 
-trend_season_results %>% 
+trend_season_event_results %>% 
     select(.fitted, .resid) %>% 
     ggplot(aes(.fitted, .resid)) +
     geom_point(alpha = 0.5) +
     geom_hline(yintercept = 0) +
     theme_bw()
-
-trend_season_results %>% 
-    select(appointment_date, .resid) %>% 
-    plot_acf_diagnostics(.date_var = appointment_date, .value = .resid, .lags = 365)
 ```
 
 # Handling Autocorrelation
 
 ```{r}
-trend_season_results %>% 
+trend_season_event_results %>% 
     select(appointment_date, .resid) %>% 
-    plot_acf_diagnostics(.date_var = appointment_date, .value = .resid, .lags = 1: 261)
+    plot_acf_diagnostics(.date_var = appointment_date, .value = .resid, .lags = 1:262)
 
-time_feats_events_tbl %>% 
-    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .lags = 1:261)
+trend_season_events_tbl %>% 
+    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .lags = 1:262)
 ```
 
 Add in some lagged terms for model although in real life this would be better captured using a time series model such as ARIMA. Using lagged terms limits ability of model to provide forecasts with small lags and reduces data to model with if large lags. Another option is to use fourier terms
 
 ```{r}
-time_feats_events_lags_tbl <- 
-    time_feats_events_tbl %>% 
-    tk_augment_lags(.value = appointments, .lags = c(1:4)) %>% 
-    tk_augment_lags(.value = bank_holiday, .lags = 1) %>% 
-    tk_augment_lags(.value = training, .lags = 1) 
-
-time_feats_events_lags_tbl %>% glimpse()
+trend_season_events_ar_tbl <- 
+    trend_season_events_tbl %>% 
+    tk_augment_lags(.value = appointments, .lags = 40)
 ```
 
 ```{r}
-time_feats_events_lags_tbl %>%
+trend_season_events_ar_tbl %>%
     plot_time_series_regression(
         .date_var = appointment_date,
         .formula = appointments ~ splines::ns(index.num, df = 4) + 
             wday.lbl + month.lbl +
             bank_holiday + training + 
-            appointments_lag1 + appointments_lag2 + appointments_lag3 + appointments_lag4 +
+            appointments_lag40,
+        .show_summary = TRUE
+    )
+```
+
+```{r}
+# add in lagged event terms
+trend_season_events_lagged_ar_tbl <-
+    trend_season_events_ar_tbl %>% 
+    tk_augment_lags(.value = bank_holiday, .lags = 1) %>% 
+    tk_augment_lags(.value = training, .lags = 1)
+
+trend_season_events_lagged_ar_tbl %>% 
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + 
+            wday.lbl + month.lbl +
+            bank_holiday + training + 
+            appointments_lag40 +
             bank_holiday_lag1 + training_lag1,
         .show_summary = TRUE
     )
 ```
 
 ```{r}
-trend_season_events_lags_tbl_mdl <-
+trend_season_events_lagged_ar_mdl <-
     lm(
         appointments ~ splines::ns(index.num, df = 4) + 
             wday.lbl + month.lbl +
             bank_holiday + training + 
-            appointments_lag1 + appointments_lag2 + appointments_lag3 + appointments_lag4 +
+            appointments_lag40 +
             bank_holiday_lag1 + training_lag1,
-        time_feats_events_lags_tbl
+        trend_season_events_lagged_ar_tbl
     )
 
-summary(trend_season_events_lags_tbl_mdl)
+summary(trend_season_events_lagged_ar_mdl)
 
 ## Explore results
-trend_season_results <- 
-    time_feats_events_lags_tbl %>% 
+trend_season_events_lagged_ar_results <- 
+    trend_season_events_lagged_ar_tbl %>% 
     drop_na() %>% 
     select(appointment_date, .observed = appointments, everything()) %>% 
-    broom::augment(trend_season_events_lags_tbl_mdl, data = .) %>% 
-    mutate(.fitted = ifelse(bank_holiday, 0, .fitted)) %>% 
+    broom::augment(trend_season_events_lagged_ar_mdl, data = .) %>% 
     mutate(.resid = .observed - .fitted)
 
 
-trend_season_results %>% 
+trend_season_events_lagged_ar_results %>% 
     select(.resid) %>% 
     ggplot(aes(.resid)) +
     geom_histogram(bins = 30, fill = "skyblue", color = "grey30") +
     theme_bw()
 
-trend_season_results %>% 
+trend_season_events_lagged_ar_results %>% 
     select(.observed, .fitted) %>% 
     ggplot(aes(.observed, .fitted)) +
     geom_point(alpha = 0.5) +
     geom_abline() +
     theme_bw()
 
-trend_season_results %>%
+trend_season_events_lagged_ar_results %>%
     ggplot(aes(.fitted, .resid)) +
     geom_point(alpha = 0.5) +
     geom_hline(yintercept = 0) +
     theme_bw()
 
-trend_season_results %>% 
+trend_season_events_lagged_ar_results %>% 
     plot_acf_diagnostics(.date_var = appointment_date, .value = .resid, .lags = 262)
 
-anova(trend_season_events_lags_tbl_mdl)
+anova(trend_season_events_lagged_ar_mdl)
 ```
 
 Explore fourier terms for longer periods
@@ -278,14 +276,40 @@ time_feats_events_lags_fourier_tbl %>%
 
 External Regressors and lagged external regressors
 
+Workforce
+
+Population
+
+Other staff appointments
+
 ```{r}
 
-time_feats_events_lags_xregs_tbl <- 
-    time_feats_events_lags_tbl %>%
-    left_join(gp_f2f_same_day_appointments %>% select(appointment_date, total_gp:registered_population))
+workforce <- read_rds("00_data/processed/wakefield_workforce_monthly.rds")
 
-## cross correlation
-gp_f2f_same_day_xregs %>% 
-    select(appointment_date, appointments, total_gp:registered_population) %>% 
-    plot_acf_diagnostics(.date_var = appointment_date, .value = appointments, .ccf_vars = c(total_gp:registered_population))
+workforce_ts <-
+    tibble("extract_date" = tk_make_timeseries(
+        start_date = min(workforce$extract_date),
+        end_date = max(workforce$extract_date)
+    )) %>%
+    left_join(workforce) %>%
+    fill(contains("total")) %>% 
+    rename(appointment_date = extract_date)
+```
+
+```{r}
+# add in external regressors
+trend_season_events_lagged_ar_xregs_tbl <-
+    trend_season_events_lagged_ar_tbl %>% 
+    left_join(workforce_ts)
+
+trend_season_events_lagged_ar_xregs_tbl %>% 
+    plot_time_series_regression(
+        .date_var = appointment_date,
+        .formula = appointments ~ splines::ns(index.num, df = 4) + 
+            wday.lbl + month.lbl +
+            bank_holiday + training + 
+            bank_holiday_lag1 + training_lag1 +
+            total_dpc,
+        .show_summary = TRUE
+    )
 ```

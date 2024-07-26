@@ -7,7 +7,7 @@ output: html_notebook
 library(tidyverse)
 library(timetk)
 
-wakefield_daily <- read_rds("00_data/processed/wakefield_daily_corrected_tbl.rds")
+wakefield_daily <- read_rds("00_data/processed/wakefield_daily_adjusted.rds")
 ```
 
 # Summary Statistics
@@ -16,7 +16,7 @@ wakefield_daily <- read_rds("00_data/processed/wakefield_daily_corrected_tbl.rds
 skimr::skim(wakefield_daily)
 ```
 
--   1888 days between 2019-03-01 and 2024-04-30
+-   1373 days between 2019-03-01 and 2024-06-28
 
 -   numeric response variable with no missing values
 
@@ -30,7 +30,7 @@ skimr::skim(wakefield_daily)
 
 ```{r}
 # overall
-total_appointments <- 
+total_daily_appointments <- 
     wakefield_daily %>%
     summarise_by_time(
         .date_var = appointment_date,
@@ -38,20 +38,20 @@ total_appointments <-
         total_appointments = sum(count_of_appointments)
     )
 
-total_appointments %>% 
+total_daily_appointments %>% 
     ggplot(aes(total_appointments)) +
     geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
     theme_bw() +
-    labs(title = "Bimodal distribution due to zero values for holidays and weekends")
+    labs(title = "Bimodal distribution due to zero values for holidays")
 
-total_appointments %>% 
+total_daily_appointments %>% 
     filter(total_appointments > 0) %>% 
     ggplot(aes(total_appointments)) +
     geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
     theme_bw() +
     labs(title = "Approximately normal distribution when zero values omitted")
 
-total_appointments %>% 
+total_daily_appointments %>% 
     filter(total_appointments > 0) %>%  
     select(total_appointments) %>% 
     summary()
@@ -62,7 +62,7 @@ total_appointments %>%
 #### GP
 
 ```{r}
-gp_appointments <- 
+gp_daily_appointments <- 
     wakefield_daily %>%
     filter(hcp_type == "GP") %>% 
     summarise_by_time(
@@ -71,14 +71,14 @@ gp_appointments <-
         total_appointments = sum(count_of_appointments)
     )
 
-gp_appointments %>% 
+gp_daily_appointments %>% 
     filter(total_appointments > 0) %>% 
     ggplot(aes(total_appointments)) +
-    geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
+    geom_histogram(bins = 15, fill = "skyblue", color = "grey30") +
     theme_bw() +
     labs(title = "Approximately normal distribution when zero values omitted")
 
-gp_appointments %>% 
+gp_daily_appointments %>% 
     filter(total_appointments > 0) %>%  
     select(total_appointments) %>% 
     summary()
@@ -87,7 +87,7 @@ gp_appointments %>%
 #### Other Practice Staff
 
 ```{r}
-other_appointments <- 
+other_staff_daily_appointments <- 
     wakefield_daily %>%
     filter(hcp_type == "Other Practice staff") %>% 
     summarise_by_time(
@@ -96,14 +96,14 @@ other_appointments <-
         total_appointments = sum(count_of_appointments)
     )
 
-other_appointments %>% 
+other_staff_daily_appointments %>% 
     filter(total_appointments > 0) %>% 
     ggplot(aes(total_appointments)) +
     geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
     theme_bw() +
     labs(title = "Approximately normal distribution when zero values omitted")
 
-other_appointments %>% 
+other_staff_daily_appointments %>% 
     filter(total_appointments > 0) %>%  
     select(total_appointments) %>% 
     summary()
@@ -315,8 +315,6 @@ attended_daily_tbl %>%
     pivot_wider(names_from = hcp_type, values_from = appointments) %>% 
     select(2:3) %>% 
     cor()
-
-
 ```
 
 Total GP appointments attended per day moderately strongly correlated to total Other Practice staff appointments (when zero values omitted)
@@ -353,13 +351,13 @@ glimpse(booking_type_attended_tbl)
 Compare location of centre and variance between same day and advanced booked?
 
 ```{r}
-total_attended_booking_type_tbl %>% 
+booking_type_attended_tbl %>% 
     filter(appointments > 0) %>% 
     ggplot(aes(appointments)) +
     geom_density(aes(fill = booking_type), alpha = 0.7) +
     theme_bw()
 
-total_attended_booking_type_tbl %>% 
+booking_type_attended_tbl %>% 
     group_by(booking_type) %>% 
     filter(appointments > 0) %>% 
     summarise(
@@ -371,15 +369,15 @@ total_attended_booking_type_tbl %>%
 
 levene_test_result <- 
     car::leveneTest(appointments ~ booking_type, 
-                    data = total_attended_booking_type_tbl %>% filter(appointments > 0))
+                    data = booking_type_attended_tbl %>% filter(appointments > 0))
 levene_test_result
 ```
 
 Statistically significant difference in variance between same day booked and advance booked appointments. This reflects my suspected theory around variability in same day demand.
 
 ```{r}
-total_attended_booking_type_tbl %>% 
-    group_by(booking_type) %>% 
+booking_type_attended_tbl %>% 
+    group_by(booking_type, hcp_type) %>% 
     plot_time_series(.date_var = appointment_date, .value = appointments)
 ```
 
@@ -418,7 +416,7 @@ gp_attended_booking_type_tbl %>%
         mean = mean(appointments),
         var  = var(appointments),
         sd   = sd(appointments),
-        ratio = mean/sd
+        ratio = sd/mean
     )
 
 levene_test_result <- 
@@ -520,7 +518,7 @@ gp_appt_mode_vs_booking_tbl %>%
     
 ```
 
-### Findings: 
+### Findings:
 
 # Exploring Seasonality
 

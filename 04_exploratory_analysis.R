@@ -6,11 +6,6 @@ library(timetk)
 
 wakefield_daily <- read_rds("00_data/processed/wakefield_daily_tbl.rds")
 
-# Autocorrelation Functions (ACF/PACF) ----
-
-
-
-
 # Anomalies ----
 
 wakefield_working_week_daily %>%
@@ -175,15 +170,6 @@ wakefield_working_week_daily %>%
         appointments = sum(count_of_appointments)
     ) %>%
     plot_stl_diagnostics(appointment_date, appointments, .feature_set = c("observed", "season", "trend", "remainder"))
-
-
-
-
-
-
-
-
-
 
 wakefield_working_week_daily %>% 
     filter(hcp_type == "GP", appt_mode %in% c("Face-to-Face", "Telephone", "Home Visit")) %>% 

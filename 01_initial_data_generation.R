@@ -2,6 +2,7 @@
 
 library(tidyverse)
 library(timetk)
+library(rvest)
 
 # Appointments Data ----
 source("00_scripts/get_daily_gpad.R")

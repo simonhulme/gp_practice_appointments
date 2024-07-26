@@ -4,6 +4,7 @@ library(tidyverse)
 library(rvest)
 library(timetk)
 
+# WRITE AS A FUNCTION
 
 # Population ----
 
@@ -83,6 +84,7 @@ zip_files_downloaded <-
 all_downloads <- 
     append(csv_files_downloaded, zip_files_downloaded) 
 
+## Standardise variable names and class
 rename_columns <- function(df) {
     if ("CCG_CODE" %in% names(df)) {
         df <- df %>% rename(AREA_CODE = CCG_CODE)
@@ -98,40 +100,29 @@ rename_columns <- function(df) {
 }
 
 reformat_dates <- function(df) {
-    if (is.character(df$EXTRACT_DATE)) {
-        df <- 
-            df %>% 
-            mutate(EXTRACT_DATE = mdy(EXTRACT_DATE))
-        return(df)
-    }
-    
-    return(df)
-    }
-                                      
-all_downloads <- map(all_downloads, rename_columns)
+    df %>% mutate(EXTRACT_DATE = parse_date_time(
+        EXTRACT_DATE,
+        orders = c("dmy", "ymd")
+    ))
+}
 
 wakefield_population <- 
-    all_downloads %>% map(~ filter(.x, AREA_CODE == "03R"))
-
-wakefield_population %>% 
+    map(all_downloads, rename_columns) %>% 
+    map(~ filter(.x, AREA_CODE == "03R")) %>% 
     map(reformat_dates)
 
 
-wakefield_population %>% map_chr(~.x$EXTRACT_DATE %>% head(1))
+wakefield_population_monthly <- 
+    wakefield_population %>%
+    reduce(bind_rows) %>%
+    janitor::clean_names() %>%
+    summarise_by_time(
+        .date_var = extract_date,
+        .by = "month",
+        population = sum(number_of_patients))
 
-
-wakefield_population[[12]]
-
-# csv_files_downloaded %>% 
-#     map( ~ .x %>% mutate(EXTRACT_DATE = dmy(EXTRACT_DATE))) %>%
-#     reduce(bind_rows) %>%
-#     janitor::clean_names() %>%
-#     filter(sub_icb_location_code == "03R" | ccg_code == "03R") %>%
-#     summarise_by_time(
-#         .date_var = extract_date,
-#         .by = "month",
-#         registered_population = sum(number_of_patients)
-#
+wakefield_population_monthly %>% 
+    plot_time_series(.date_var = extract_date, .value = population)
 
 ## save data
-write_rds(registered_population, "00_data/processed/wakefield_population_monthly.rds")
+write_rds(wakefield_population_monthly, "00_data/processed/wakefield_population_monthly.rds")

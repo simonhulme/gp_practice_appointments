@@ -10,8 +10,9 @@ library(modeltime)
 library(timetk)
 
 # Read in raw Data
-all_appointments <- read_rds("00_data/processed/wakefield_daily_corrected_tbl.rds")
-events <- read_rds("00_data/processed/events_tbl.rds")
+appointments <- read_rds("00_data/processed/wakefield_daily_adj.rds")
+events       <- read_rds("00_data/processed/wakefield_events.rds")
+population   <- read_rds("00_data/processed/wakefield_population_monthly.rds")
 ```
 
 # Create Time Series
@@ -28,7 +29,7 @@ Attended: Reflects actual daily workload
 
 ```{r}
 gp_appts_tbl <-
-    all_appointments %>%
+    appointments %>%
     filter(hcp_type == "GP",
            appt_status == "Attended") %>%
     filter_by_time(.date_var = appointment_date, .start_date = "2021-07-20") %>% 
@@ -38,8 +39,8 @@ gp_appts_tbl <-
         appointments = sum(count_of_appointments)
     ) %>% 
     left_join(events) %>% 
-    filter(!weekend) %>% 
-    select(-weekend, - pandemic)
+    filter(!weekend) %>% # turn into 5 day business week series
+    select(-weekend)
 ```
 
 ### Visualise Time Series

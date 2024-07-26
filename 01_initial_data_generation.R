@@ -211,7 +211,7 @@ wakefield_daily_adj <-
     left_join(wakefield_events) %>%
     mutate(count_of_appointments = ifelse(weekend |
                                               bank_holiday, 0, count_of_appointments)) %>% 
-    select(appointment_date, count_of_appointments, hcp_type:time_between_book_and_appt)
+    select(-c(weekend, bank_holiday, training))
 
 ## Save Data ----
 write_rds(wakefield_events, "00_data/processed/wakefield_events.rds") 

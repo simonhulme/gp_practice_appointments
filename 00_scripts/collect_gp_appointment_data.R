@@ -60,8 +60,8 @@ tidy_csv_files <- function(df, area) {
     output <- 
         df %>% 
         rename_columns() %>% 
-        reformat_dates() %>% 
-        filter_select_data(area = area)
+        filter_select_data(area = area) %>% 
+        reformat_dates()
     
     output
 }

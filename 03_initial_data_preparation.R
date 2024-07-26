@@ -214,3 +214,14 @@ wakefield_5_day_tbl <-
 
 
 
+## Adjust holiday and weekend values to zero ----
+wakefield_daily_adj <-
+  wakefield_daily_raw %>%
+  left_join(wakefield_events) %>%
+  mutate(count_of_appointments = ifelse(weekend |
+                                          bank_holiday, 0, count_of_appointments)) %>% 
+  select(-c(weekend, bank_holiday, training))
+
+write_rds(wakefield_daily_adj, "00_data/processed/wakefield_daily_adj.rds")
+
+

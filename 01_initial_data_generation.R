@@ -9,9 +9,9 @@ source("00_scripts/collect_gp_appointment_data.R")
 options(timeout = max(300, getOption("timeout")))
 
 urls <- c(
-    "https://files.digital.nhs.uk/30/71883D/Appointments_GP_Daily_Apr19.zip",
-    "https://files.digital.nhs.uk/20/40049A/Appointments_GP_Daily_Oct21.zip",
-    "https://files.digital.nhs.uk/A9/D843D9/Appointments_GP_Daily_CSV_Jun_24.zip"
+    "https://files.digital.nhs.uk/C3/C7568F/Appointments_GP_Daily_Jun19.zip",     # 01 Jan 2018 to 30 Jun 2019
+    "https://files.digital.nhs.uk/25/445FF6/Appointments_GP_Daily_Dec21.zip",     # 01 Jul 2019 to 31 Dec 2021
+    "https://files.digital.nhs.uk/A9/D843D9/Appointments_GP_Daily_CSV_Jun_24.zip" # 01 Jan 2022 to 30 Jun 2024
 )
 
 raw_data <- map(urls, extract_zipped_csv_files)
@@ -140,17 +140,8 @@ wakefield_events <-
         training     = appointment_date %in% training_dates
     )
 
-## Adjust holiday and weekend values to zero ----
-wakefield_daily_adj <-
-    wakefield_daily_raw %>%
-    left_join(wakefield_events) %>%
-    mutate(count_of_appointments = ifelse(weekend |
-                                              bank_holiday, 0, count_of_appointments)) %>% 
-    select(-c(weekend, bank_holiday, training))
-
 ## Save Data ----
 write_rds(wakefield_events, "00_data/processed/wakefield_events.rds") 
-write_rds(wakefield_daily_adj, "00_data/processed/wakefield_daily_adj.rds")
 
 # External features ----
 

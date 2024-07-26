@@ -5,90 +5,25 @@ library(timetk)
 library(rvest)
 
 # Appointments Data ----
-source("00_scripts/get_daily_gpad.R")
+source("00_scripts/collect_gp_appointment_data.R")
+options(timeout = max(300, getOption("timeout")))
 
-##  Extract raw data from website ----
+urls <- c(
+    "https://files.digital.nhs.uk/30/71883D/Appointments_GP_Daily_Apr19.zip",
+    "https://files.digital.nhs.uk/20/40049A/Appointments_GP_Daily_Oct21.zip",
+    "https://files.digital.nhs.uk/A9/D843D9/Appointments_GP_Daily_CSV_Jun_24.zip"
+)
 
-### Nov 2017 to Apr 2019  ----
-subset_1 <- 
-    get_daily_gpad(url = "https://files.digital.nhs.uk/30/71883D/Appointments_GP_Daily_Apr19.zip")
+raw_data <- map(urls, extract_zipped_csv_files)
 
-data_1 <- 
-    subset_1 %>% 
-    map(~ filter(.x, CCG_CODE == "03R")) %>% 
-    reduce(bind_rows) %>% 
-    select(
-        Appointment_Date,
-        HCP_TYPE,
-        APPT_MODE,
-        TIME_BETWEEN_BOOK_AND_APPT,
-        APPT_STATUS,
-        COUNT_OF_APPOINTMENTS
-    )
+processed_data <- 
+    raw_data %>% 
+    flatten() %>% 
+    map(tidy_csv_files, area = "03R")
 
-### May 2019 to Oct 2021 ----
-
-subset_2 <- 
-    get_daily_gpad("https://files.digital.nhs.uk/20/40049A/Appointments_GP_Daily_Oct21.zip")
-
-data_2 <- 
-    subset_2 %>% 
-    map(~ filter(.x, CCG_CODE == "03R")) %>% 
-    reduce(bind_rows) %>% 
-    select(
-        Appointment_Date,
-        HCP_TYPE,
-        APPT_MODE,
-        TIME_BETWEEN_BOOK_AND_APPT,
-        APPT_STATUS,
-        COUNT_OF_APPOINTMENTS
-    )
-
-### Nov 2021 to Apr 2024 ----
-
-subset_3 <- 
-    get_daily_gpad("https://files.digital.nhs.uk/D2/F7DA4B/Appointments_GP_Daily_CSV_Apr_24.zip") 
-
-data_3 <- 
-    subset_3 %>% 
-    map(~ filter(.x, SUB_ICB_LOCATION_CODE == "03R")) %>% 
-    reduce(bind_rows) %>% 
-    select(
-        Appointment_Date,
-        HCP_TYPE,
-        APPT_MODE,
-        TIME_BETWEEN_BOOK_AND_APPT,
-        APPT_STATUS,
-        COUNT_OF_APPOINTMENTS
-    )
-
-### Jun 2024 -----
-
-subset_4 <- 
-    get_daily_gpad("https://files.digital.nhs.uk/A9/D843D9/Appointments_GP_Daily_CSV_Jun_24.zip")
-
-data_4 <- 
-    subset_4 %>% 
-    map(~ filter(.x, SUB_ICB_LOCATION_CODE == "03R")) %>% 
-    reduce(bind_rows) %>% 
-    select(
-        Appointment_Date,
-        HCP_TYPE,
-        APPT_MODE,
-        TIME_BETWEEN_BOOK_AND_APPT,
-        APPT_STATUS,
-        COUNT_OF_APPOINTMENTS
-    )
-
-## Combine datasets ----
-
-wakefield_daily_raw <- 
-    list(data_1, data_2, data_3, data_4) %>% 
-    reduce(bind_rows) %>% 
-    unique() %>% # Jun 24 data contains duplicate data
-    mutate(Appointment_Date = dmy(Appointment_Date)) %>%
-    arrange(Appointment_Date) %>% 
-    janitor::clean_names()
+wakefield_daily_raw <-
+    reduce(processed_data, bind_rows) %>% 
+    arrange(appointment_date)
 
 ## Save data ----
 write_rds(wakefield_daily_raw, "00_data/raw/wakefield_daily_raw.rds")
@@ -218,6 +153,4 @@ write_rds(wakefield_events, "00_data/processed/wakefield_events.rds")
 write_rds(wakefield_daily_adj, "00_data/processed/wakefield_daily_adj.rds")
 
 # External features ----
-
-
 

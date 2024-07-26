@@ -25,7 +25,7 @@ total_daily_appts %>%
     plot_time_series(
         .date_var = appointment_date,
         .value = appointments, 
-        .title = "Weekly low values due to weekends") 
+        .title = "Recurrent low values at weekends") 
 
 total_weekly_appts <- 
     wakefield_daily_raw %>% 
@@ -39,7 +39,7 @@ total_weekly_appts %>%
     plot_time_series(
         .date_var = appointment_date,
         .value = appointments,
-        .title = "Annual low values due to Xmas and New Year Holidays")
+        .title = "Recurrent low values due to Xmas and New Year Holidays")
 
 total_monthly_appts <- 
     wakefield_daily_raw %>% 

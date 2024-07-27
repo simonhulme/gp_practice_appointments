@@ -10,7 +10,7 @@ library(timetk)
 wakefield_daily <- read_rds("00_data/processed/wakefield_daily_adjusted.rds")
 ```
 
-# Summary Statistics
+# 1: Summary Statistics
 
 ```{r}
 skimr::skim(wakefield_daily)
@@ -22,11 +22,9 @@ skimr::skim(wakefield_daily)
 
 -   4 categorical variables (nominal)
 
-# Exploratory Visualisation
+# 2: Exploratory Visualisation
 
-## Distribution of appointments
-
-### Total appointments
+## 2a: Distribution of appointmentsTotal appointments
 
 ```{r}
 # overall
@@ -42,24 +40,13 @@ total_daily_appointments %>%
     ggplot(aes(total_appointments)) +
     geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
     theme_bw() +
-    labs(title = "Bimodal distribution due to zero values for holidays")
-
-total_daily_appointments %>% 
-    filter(total_appointments > 0) %>% 
-    ggplot(aes(total_appointments)) +
-    geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
-    theme_bw() +
-    labs(title = "Approximately normal distribution when zero values omitted")
+    labs(title = "Distribution of Total Daily Appointments")
 
 total_daily_appointments %>% 
     filter(total_appointments > 0) %>%  
     select(total_appointments) %>% 
     summary()
 ```
-
-### By Health Care Professional
-
-#### GP
 
 ```{r}
 gp_daily_appointments <- 
@@ -72,19 +59,16 @@ gp_daily_appointments <-
     )
 
 gp_daily_appointments %>% 
-    filter(total_appointments > 0) %>% 
     ggplot(aes(total_appointments)) +
-    geom_histogram(bins = 15, fill = "skyblue", color = "grey30") +
+    geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
     theme_bw() +
-    labs(title = "Approximately normal distribution when zero values omitted")
+    labs(title = "Distribution of GP Daily Appointments")
 
 gp_daily_appointments %>% 
     filter(total_appointments > 0) %>%  
     select(total_appointments) %>% 
     summary()
 ```
-
-#### Other Practice Staff
 
 ```{r}
 other_staff_daily_appointments <- 
@@ -97,11 +81,10 @@ other_staff_daily_appointments <-
     )
 
 other_staff_daily_appointments %>% 
-    filter(total_appointments > 0) %>% 
     ggplot(aes(total_appointments)) +
     geom_histogram(bins = 20, fill = "skyblue", color = "grey30") +
     theme_bw() +
-    labs(title = "Approximately normal distribution when zero values omitted")
+    labs(title = "Distribution of Other Practice staff Daily Appointments")
 
 other_staff_daily_appointments %>% 
     filter(total_appointments > 0) %>%  
@@ -109,7 +92,11 @@ other_staff_daily_appointments %>%
     summary()
 ```
 
-## Total Appointments by Feature
+## \*\* FINDINGS
+
+-   approximately normal distributions when zero values for holidays omitted
+
+## 2b: Total Appointments by Feature
 
 ```{r}
 wakefield_daily %>%
@@ -118,18 +105,24 @@ wakefield_daily %>%
     mutate(hcp_type = fct_reorder(hcp_type, -total_appointments)) %>%
     ggplot(aes(hcp_type, total_appointments)) +
     geom_col(fill = "skyblue", color = "grey30") +
-    theme_bw()
+    theme_bw() +
+    labs(title = "Total Appointments by HCP Type")
 ```
 
-```{r}
-wakefield_daily %>%
-    group_by(appt_mode) %>%
-    summarise(total_appointments = sum(count_of_appointments)) %>%
-    mutate(appt_mode = fct_reorder(appt_mode, -total_appointments)) %>%
-    ggplot(aes(appt_mode, total_appointments)) +
-    geom_col(fill = "skyblue", color = "grey30") +
-    theme_bw()
-```
+-   <div>
+
+    ```{r}
+    wakefield_daily %>%
+        group_by(appt_mode) %>%
+        summarise(total_appointments = sum(count_of_appointments)) %>%
+        mutate(appt_mode = fct_reorder(appt_mode, -total_appointments)) %>%
+        ggplot(aes(appt_mode, total_appointments)) +
+        geom_col(fill = "skyblue", color = "grey30") +
+        theme_bw() +
+        labs(title = "Total Appointments by Appointment Mode")
+    ```
+
+    </div>
 
 ```{r}
 wakefield_daily %>%
@@ -138,7 +131,8 @@ wakefield_daily %>%
     mutate(appt_status = fct_reorder(appt_status, -total_appointments)) %>%
     ggplot(aes(appt_status, total_appointments)) +
     geom_col(fill = "skyblue", color = "grey30") +
-    theme_bw()
+    theme_bw() +
+    labs(title = "Total Appointments by Appointment Status")
 ```
 
 ```{r}
@@ -149,22 +143,38 @@ wakefield_daily %>%
     geom_col(fill = "skyblue", color = "grey30") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-    xlab("Time between booking and appointment date")
+    labs(title = "Total Appointments by Time Between Booking and Appointment Date",
+         x = "Time between booking and appointment date")
+
+wakefield_daily %>%
+    mutate(
+        booking_type = if_else(
+            time_between_book_and_appt == "Same Day",
+            "Same Day",
+            "Advance"
+        )
+    ) %>%
+    group_by(booking_type) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    ggplot(aes(booking_type, total_appointments)) +
+    geom_col(fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+    labs(title = "Total Appointments by Booking Type",
+         x = "Booking Type")
 ```
 
-### Findings
+## \*\* FINDINGS
 
-Most common levels are:
+-   More appointments booked with Other Practice Staff than with GPs
 
--   Other Practice Staff
+-   More appointments booked as Face-to-Face than other modes
 
--   Face to Face Appointments
+-   Only a small percentage DNAs but not sure what 'unknown' means
 
--   Attended
+-   Same day appointments are most frequent individual group although overall more appointments booked in advance (all non same day appointments aggregated)
 
--   Same Day
-
-## Appointments vs. HCP Type by Feature
+## 2c: Appointments vs. HCP Type by Feature
 
 ```{r}
 wakefield_daily %>%
@@ -214,6 +224,22 @@ wakefield_daily %>%
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
     xlab("Time between booking and appointment date") +
     tidyquant::scale_fill_tq()
+
+wakefield_daily %>%
+    filter(hcp_type == "GP" |
+               hcp_type == "Other Practice staff") %>%
+    mutate(booking_type = if_else(time_between_book_and_appt == "Same Day",
+                                  "Same Day",
+                                  "Advance")) %>%
+    group_by(hcp_type, booking_type) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    mutate(hcp_type = hcp_type) %>%
+    ggplot(aes(hcp_type, total_appointments, fill = booking_type)) +
+    geom_col(position = "fill") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+    xlab("Time between booking and appointment date") +
+    tidyquant::scale_fill_tq()
 ```
 
 ```{r}
@@ -233,53 +259,101 @@ wakefield_daily %>%
     
 ```
 
-### Findings
+## \*\* FINDINGS
 
--   Higher proportion of overall appointments face to face for other staff compared to GPs
+-   Proportion of face to face appointments higher for other staff compared to GPs
 
--   Higher proportion of DNA or unknown status for other staff compared to GPs
+-   Proportion of DNA/Unknown appointments higher for other staff compared to GPs
 
--   Higher proportion of same day appointments for GPs compared to other staff
+-   Proportion of same day appointments higher for GPs compared to other staff
 
 -   Lower DNA rate for same day appointments - rate increases with time between booking and appointment
 
-# Time Series Analysis
+# 3: Time Series Analysis
 
-## Appointments attended
+Focus on appointments recorded as attended. This provides an overview of the workload.
 
-This provides an overview of the workload without including appointments not attended.
+Look at total appointments plus subgroups - GP vs. Other practice staff, telephone vs. face to face, same day vs advanced booking.Finally look at all combinations.
 
-Attended = appointments delivered from surgery premises - ie. exclude home visits with status recorded as attended
+## 3a: Total Appointments
 
 ```{r}
-attended_daily_tbl <-
+wakefield_filtered_daily <-
     wakefield_daily %>%
-    filter(hcp_type == "GP" | hcp_type == "Other Practice staff", 
-           appt_status == "Attended",
-           appt_mode %in% c("Face-to-Face", "Telephone")) %>% 
+    filter(
+        hcp_type == "GP" | hcp_type == "Other Practice staff",
+        appt_status == "Attended",
+        appt_mode %in% c("Face-to-Face", "Telephone"),
+        time_between_book_and_appt != "Unknown"
+    ) %>%
+    mutate(booking_type = if_else(time_between_book_and_appt == "Same Day",
+                                  "Same Day",
+                                  "Advance"))
+```
+
+```{r}
+wakefield_filtered_daily %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Total Daily Appointments")
+```
+
+```{r}
+wakefield_filtered_daily %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Total Weekly Appointments")
+```
+
+```{r}
+wakefield_filtered_daily %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Total Monthly Appointments")
+```
+
+## \*\* FINDINGS
+
+## 3b: Total Appointments by HCP Type
+
+```{r}
+total_appts_by_hcp <-
+    wakefield_filtered_daily %>% 
     group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
-        appointments = sum(count_of_appointments)) %>% 
-    pivot_wider(names_from = hcp_type, values_from = appointments) %>% 
-    mutate(Total = GP + `Other Practice staff`) %>% 
-    pivot_longer(cols = 2:4, names_to = "hcp_type", values_to = "appointments") %>% 
-    mutate(hcp_type = fct_relevel(hcp_type, c("Total", "GP", "Other Practice staff")))
+        appointments = sum(count_of_appointments))
     
 
-# by month
-attended_daily_tbl %>% 
+# by day
+total_appts_by_hcp %>% 
     group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
-        .by = "month",
+        .by = "day",
         appointments = sum(appointments)) %>% 
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
-                     .title = "Time Series Plot: Total Monthly Appointments")
+                     .title = "Time Series Plot: Daily Appointments by HCP Type")
+
 # by week
-attended_daily_tbl %>% 
+total_appts_by_hcp %>% 
     group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -287,188 +361,113 @@ attended_daily_tbl %>%
         appointments = sum(appointments)) %>% 
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
-                     .title = "Time Series Plot: Total Weekly Appointments",
-                     .smooth = FALSE)
+                     .title = "Time Series Plot: Weekly Appointments by HCP Type")
 
-# by day
-attended_daily_tbl %>% 
+# by month
+total_appts_by_hcp %>% 
     group_by(hcp_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)) %>% 
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
-                     .title = "Time Series Plot: Total Daily Appointments",
-                     .smooth = FALSE)
+                     .title = "Time Series Plot: Monthly Appointments by HCP Type")
 ```
 
-Explore correlation between GP and Other Staff Appointments.
+## \*\* FINDINGS
+
+Total appointments increasing since start of 2021 due to a steady increase in appointments with other practice staff. GP appointments peaked in early 2022 and have been decreasing since then.
+
+## 3c: Total Appointments by Booking Type
 
 ```{r}
-attended_daily_tbl %>% 
-    filter(hcp_type != "Total", appointments > 0) %>%
-    pivot_wider(names_from = hcp_type, values_from = appointments) %>% 
-    ggplot(aes(GP, `Other Practice staff`)) +
-    geom_point(alpha = 0.5) +
-    geom_smooth(method = 'lm') +
-    theme_bw()
-
-attended_daily_tbl %>% 
-    filter(hcp_type != "Total", appointments > 0) %>%
-    pivot_wider(names_from = hcp_type, values_from = appointments) %>% 
-    select(2:3) %>% 
-    cor()
-```
-
-Total GP appointments attended per day moderately strongly correlated to total Other Practice staff appointments (when zero values omitted)
-
-GP workload is simpler to analyse because in this dataset "Other Practice Staff" is a homogeneous group that may contain HCA, PA, Nurse, Pharmacists etc. and may be better utilised as a feature rather than a response
-
-GP appointments fell around pandemic then increased to a peak between 2022 and 2023. Values appear to be falling since 2023 . Total appointments increasing so reduced total gp workload occurring as workload for other practice staff increasing.
-
-A further question to consider relates to workforce. What are appointment rates per GP? Can workforce data be used to estimate this? Is there any data that describes daily GP sessions?
-
-## Appointments attended by Booking Type
-
-Same day appointments appear to be the most frequent GP appointments and from my experience these are liable to the most fluctuation and impact on perceived workload and well-being.
-
-```{r}
-booking_type_attended_tbl <-
-    wakefield_daily %>% 
-    filter(hcp_type == "GP" | hcp_type == "Other Practice staff", 
-           appt_status == "Attended",
-           appt_mode %in% c("Face-to-Face", "Telephone", "Video Conference/Online"),
-           time_between_book_and_appt != "Unknown") %>%
-    mutate(booking_type = if_else(time_between_book_and_appt == "Same Day", "Same Day", "Advance")) %>%
-    group_by(booking_type, hcp_type) %>%
+total_appts_by_booking_type <-
+    wakefield_filtered_daily %>% 
+    group_by(booking_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    ungroup()
+        appointments = sum(count_of_appointments))
 
-glimpse(booking_type_attended_tbl)
-```
-
-Compare location of centre and variance between same day and advanced booked?
-
-```{r}
-booking_type_attended_tbl %>% 
-    filter(appointments > 0) %>% 
-    ggplot(aes(appointments)) +
-    geom_density(aes(fill = booking_type), alpha = 0.7) +
-    theme_bw()
-
-booking_type_attended_tbl %>% 
-    group_by(booking_type) %>% 
-    filter(appointments > 0) %>% 
-    summarise(
-        mean = mean(appointments),
-        var  = var(appointments),
-        sd   = sd(appointments),
-        ratio = mean/sd
-    )
-
-levene_test_result <- 
-    car::leveneTest(appointments ~ booking_type, 
-                    data = booking_type_attended_tbl %>% filter(appointments > 0))
-levene_test_result
-```
-
-Statistically significant difference in variance between same day booked and advance booked appointments. This reflects my suspected theory around variability in same day demand.
-
-```{r}
-booking_type_attended_tbl %>% 
-    group_by(booking_type, hcp_type) %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments)
-```
-
-Overall same day booked appointments have remained fairly consistent with a slow approximately linear increase over the time series. Advance booked appointments drop dramatically in early 2020 which is consistent with the first UK lock down due to the covid pandemic.
-
-## GP Appointments by Booking Type
-
-```{r}
-gp_attended_booking_type_tbl <-
-    wakefield_daily %>% 
-    filter(hcp_type == "GP", 
-           appt_status == "Attended",
-           appt_mode %in% c("Face-to-Face", "Telephone", "Video Conference/Online"),
-           time_between_book_and_appt != "Unknown") %>%
-    mutate(booking_type = if_else(time_between_book_and_appt == "Same Day", "Same Day", "Advance")) %>%
-    group_by(booking_type) %>%
+# by day
+total_appts_by_booking_type %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    ungroup()
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Daily Appointments by Booking Type")
+
+# by week
+total_appts_by_booking_type %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Weekly Appointments by Booking Type")
+
+# by month
+total_appts_by_booking_type %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Monthly Appointments by Booking Type")
 ```
 
-```{r}
-gp_attended_booking_type_tbl %>% 
-    filter(appointments > 0) %>% 
-    ggplot(aes(appointments)) +
-    geom_density(aes(fill = booking_type), alpha = 0.7) +
-    theme_bw()
+## \*\* FINDINGS
 
-gp_attended_booking_type_tbl %>% 
-    group_by(booking_type) %>% 
-    filter(appointments > 0) %>% 
-    summarise(
-        mean = mean(appointments),
-        var  = var(appointments),
-        sd   = sd(appointments),
-        ratio = sd/mean
-    )
-
-levene_test_result <- 
-    car::leveneTest(appointments ~ booking_type, 
-                    data = gp_attended_booking_type_tbl %>% filter(appointments > 0))
-levene_test_result
-```
+## 3d: GP Appointments by Mode
 
 ```{r}
-gp_attended_booking_type_tbl %>% 
-    group_by(booking_type) %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments)
-```
-
-## GP appointments vs. Appointment Mode by Booking Type
-
-Homing in on the data further I want to explore how patterns of consulting are changing for GPs by comparing appointment mode with booking type.
-
-```{r}
-gp_appt_mode_vs_booking_tbl <-
-    wakefield_daily %>% 
-    filter(hcp_type == "GP", 
-           appt_status == "Attended",
-           appt_mode %in% c("Face-to-Face", "Telephone"),
-           time_between_book_and_appt != "Unknown") %>%
-    mutate(booking_type = if_else(time_between_book_and_appt == "Same Day", "Same Day", "Advance")) %>%
-    group_by(booking_type, appt_mode) %>%
+total_appts_by_appt_mode <-
+    wakefield_filtered_daily %>% 
+    group_by(appt_mode) %>% 
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    ungroup()
+        appointments = sum(count_of_appointments))
+
+# by day
+total_appts_by_appt_mode %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Daily Appointments by Mode")
+
+# by week
+total_appts_by_appt_mode %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Weekly Appointments by Mode")
+
+# by month
+total_appts_by_appt_mode %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .title = "Time Series Plot: Monthly Appointments by Mode")
 ```
 
-```{r}
-gp_appt_mode_vs_booking_tbl %>% 
-    filter(appointments > 0) %>%
-    group_by(appt_mode, booking_type) %>% 
-    summarise(
-        mean = mean(appointments),
-        var  = var(appointments),
-        sd   = sd(appointments),
-        ratio = sd/mean
-    )
-```
+## \*\* FINDINGS
 
--   **Face-to-Face Appointments**: The same-day appointments have a higher absolute number (mean) even though their relative variability (CV) is lower. This indicates a higher workload overall, which can be taxing.
-
--   **Telephone Appointments**: The same-day appointments absolute number is not as high but there is higher relative and absolute variability, indicating volatility.
-
-# Autocorrelation analysis
+# 4: Autocorrelation analysis
 
 I am most interested in Same Day GP appointments broken down into total, face-to-face. and telephone.
 
@@ -623,3 +622,31 @@ same_day_vs_booked_daily_tbl %>%
     scale_fill_brewer(type = "qual", palette = 3)
 
 ```
+
+# 
+
+## Correlation
+
+```{r}
+attended_daily_tbl %>% 
+    filter(hcp_type != "Total", appointments > 0) %>%
+    pivot_wider(names_from = hcp_type, values_from = appointments) %>% 
+    ggplot(aes(GP, `Other Practice staff`)) +
+    geom_point(alpha = 0.5) +
+    geom_smooth(method = 'lm') +
+    theme_bw()
+
+attended_daily_tbl %>% 
+    filter(hcp_type != "Total", appointments > 0) %>%
+    pivot_wider(names_from = hcp_type, values_from = appointments) %>% 
+    select(2:3) %>% 
+    cor()
+```
+
+Total GP appointments attended per day moderately strongly correlated to total Other Practice staff appointments (when zero values omitted)
+
+GP workload is simpler to analyse because in this dataset "Other Practice Staff" is a homogeneous group that may contain HCA, PA, Nurse, Pharmacists etc. and may be better utilised as a feature rather than a response
+
+GP appointments fell around pandemic then increased to a peak between 2022 and 2023. Values appear to be falling since 2023 . Total appointments increasing so reduced total gp workload occurring as workload for other practice staff increasing.
+
+A further question to consider relates to workforce. What are appointment rates per GP? Can workforce data be used to estimate this? Is there any data that describes daily GP sessions?

@@ -8,75 +8,7 @@ wakefield_daily <- read_rds("00_data/processed/wakefield_daily_tbl.rds")
 
 # Anomalies ----
 
-wakefield_working_week_daily %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "week",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .title = "Troughs for total apppointments when weeks that contain holiday "
-    )
 
-wakefield_working_week_daily %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .title = ""
-    )
-
-# BY MODE & HCP
-
-wakefield_working_week_daily %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online"),
-           hcp_type != "HCP Type Not Provided") %>%
-    group_by(appt_mode, hcp_type) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .facet_ncol = 3,
-        .title = ""
-    )
-
-# BY BOOKING & HCP
-
-same_day_vs_booked_daily_tbl %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online"),
-           hcp_type != "HCP Type Not Provided") %>%
-    group_by(booking, hcp_type) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .facet_ncol = 3,
-        .title = ""
-    )
 
 # Seasonal Decomposition ----
 

@@ -94,7 +94,7 @@ other_staff_daily_appointments %>%
 
 ## \*\* FINDINGS
 
--   approximately normal distributions when zero values for holidays omitted
+-   approximately normal distributions when values for Bank Holidays omitted
 
 ## 2b: Total Appointments by Feature
 
@@ -166,13 +166,15 @@ wakefield_daily %>%
 
 ## \*\* FINDINGS
 
--   More appointments booked with Other Practice Staff than with GPs
+-   More appointments with Other Practice Staff than with GPs
 
--   More appointments booked as Face-to-Face than other modes
+-   More appointments Face-to-Face than other modes
 
--   Only a small percentage DNAs but not sure what 'unknown' means
+-   Only a small percentage DNAs (but not sure what 'unknown' means)
 
--   Same day appointments are most frequent individual group although overall more appointments booked in advance (all non same day appointments aggregated)
+-   Same day most frequent category of time between booking and appointment date
+
+    -    Overall more appointments advance booked where all non same day appointments aggregated
 
 ## 2c: Appointments vs. HCP Type by Feature
 
@@ -329,6 +331,12 @@ wakefield_filtered_daily %>%
 
 ## \*\* FINDINGS
 
+-   significant fall in appointments in early 2020 due to pandemic
+
+-   from mid 2020 to mid 2023 appointments increased
+
+-   since late 2023 total appointments plateaued.
+
 ## 3b: Total Appointments by HCP Type
 
 ```{r}
@@ -339,8 +347,9 @@ total_appts_by_hcp <-
         .date_var = appointment_date,
         .by = "day",
         appointments = sum(count_of_appointments))
-    
+```
 
+```{r}
 # by day
 total_appts_by_hcp %>% 
     group_by(hcp_type) %>% 
@@ -351,7 +360,9 @@ total_appts_by_hcp %>%
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
                      .title = "Time Series Plot: Daily Appointments by HCP Type")
+```
 
+```{r}
 # by week
 total_appts_by_hcp %>% 
     group_by(hcp_type) %>% 
@@ -362,7 +373,9 @@ total_appts_by_hcp %>%
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
                      .title = "Time Series Plot: Weekly Appointments by HCP Type")
+```
 
+```{r}
 # by month
 total_appts_by_hcp %>% 
     group_by(hcp_type) %>% 
@@ -377,7 +390,13 @@ total_appts_by_hcp %>%
 
 ## \*\* FINDINGS
 
-Total appointments increasing since start of 2021 due to a steady increase in appointments with other practice staff. GP appointments peaked in early 2022 and have been decreasing since then.
+-   GP and Other Practice staff appointments both fell due to pandemic
+
+-   From mid 2020 GP appointments increased up to peak in early 2022 but since then rate falling
+
+-   From early 2021 Other practice staff appointments have been increasing
+
+-   It appears that plateau in total appointments consists of a fall in GP appointments combined with an increase in appointments with other practice staff
 
 ## 3c: Total Appointments by Booking Type
 
@@ -389,7 +408,9 @@ total_appts_by_booking_type <-
         .date_var = appointment_date,
         .by = "day",
         appointments = sum(count_of_appointments))
+```
 
+```{r}
 # by day
 total_appts_by_booking_type %>%
     summarise_by_time(
@@ -399,7 +420,9 @@ total_appts_by_booking_type %>%
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
                      .title = "Time Series Plot: Daily Appointments by Booking Type")
+```
 
+```{r}
 # by week
 total_appts_by_booking_type %>% 
     summarise_by_time(
@@ -409,7 +432,9 @@ total_appts_by_booking_type %>%
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
                      .title = "Time Series Plot: Weekly Appointments by Booking Type")
+```
 
+```{r}
 # by month
 total_appts_by_booking_type %>%
     summarise_by_time(
@@ -423,6 +448,10 @@ total_appts_by_booking_type %>%
 
 ## \*\* FINDINGS
 
+-   advance bookings fell significantly in early 2020 due to the pandemic but same day bookings did not seem to be impacted
+
+-   advance and same day appointments bookings have been increasing since but since the peak in late 2022/early 2023 same day appointments appear to be decreasing
+
 ## 3d: GP Appointments by Mode
 
 ```{r}
@@ -433,7 +462,9 @@ total_appts_by_appt_mode <-
         .date_var = appointment_date,
         .by = "day",
         appointments = sum(count_of_appointments))
+```
 
+```{r}
 # by day
 total_appts_by_appt_mode %>%
     summarise_by_time(
@@ -443,7 +474,9 @@ total_appts_by_appt_mode %>%
     plot_time_series(.date_var = appointment_date,
                      .value = appointments,
                      .title = "Time Series Plot: Daily Appointments by Mode")
+```
 
+```{r}
 # by week
 total_appts_by_appt_mode %>% 
     summarise_by_time(
@@ -454,6 +487,9 @@ total_appts_by_appt_mode %>%
                      .value = appointments,
                      .title = "Time Series Plot: Weekly Appointments by Mode")
 
+```
+
+```{r}
 # by month
 total_appts_by_appt_mode %>%
     summarise_by_time(
@@ -467,7 +503,203 @@ total_appts_by_appt_mode %>%
 
 ## \*\* FINDINGS
 
-# 4: Autocorrelation analysis
+-   face to face and telephone appointments appear to be inversely related
+
+-   in 2020, due to the pandemic, there appeared to be a shift from face to face to telephone appointments
+
+-   from early 2021 telephone appointments have been falling whilst face to face have increased
+
+-   both appear to be plateauing since start of 2024
+
+## 3e: Appointments by hcp type, mode, and booking type
+
+```{r}
+total_appts_by_subgroup <-
+    wakefield_filtered_daily %>% 
+    group_by(appt_mode, hcp_type, booking_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments))
+```
+
+```{r}
+# by month
+total_appts_by_subgroup %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .trelliscope = TRUE,
+                     .facet_strip_remove = TRUE)
+```
+
+## \*\* FINDINGS
+
+-   face to face appointments for all subgroups of hcp and booking type demonstrate similar pattern
+
+    -   fell during early pandemic then increased until early 2024 then plateaued
+
+-   telephone appointments for GPs increase during pandemic for both advance booked and same day appointments.
+
+    -   fallen since mid 2021 - decrease continuing although potential plateauing
+
+-   telephone appointments for other practice staff shows different pattern
+
+    -   same day appointments showed increase in pandemic but now back to prepandemic levels and stable
+
+    -   advance booked appointments appear to increasingly be delivered by telephone
+
+        -   is this non urgent / planned care or triage??
+
+            -   would need to analyse data with original booking type levels to explore this further
+
+-   EACH GROUP APPEARS TO SHOW SIGNIFICANT IMPACT OF PANDEMIC
+
+    -   RE-VISUALISE POST PANDEMIC (2021-08-01 +)
+
+-   EACH GROUP SMOOTHED CURVE APPEARS TO HAVE BEEN INFLUENCED BY POTENTIAL ANOMALOUS VALUES LATE 2022 EARLY 2023
+
+## 3f: Appointments by hcp type, mode, and booking type - POST PANDEMIC
+
+```{r}
+total_appts_by_subgroup <-
+    wakefield_filtered_daily %>% 
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08-01") %>% 
+    group_by(appt_mode, hcp_type, booking_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "day",
+        appointments = sum(count_of_appointments))
+```
+
+```{r}
+# by month
+total_appts_by_subgroup %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)) %>% 
+    plot_time_series(.date_var = appointment_date,
+                     .value = appointments,
+                     .trelliscope = TRUE,
+                     .facet_strip_remove = TRUE)
+```
+
+# 4: Analysis of anomalies
+
+LOOK AT TIME SERIES OF SUBGROUPS
+
+```{r}
+gp_f2f_advance <- 
+    total_appts_by_subgroup %>% 
+    ungroup() %>% 
+    filter(appt_mode == "Face-to-Face", booking_type == "Same Day", hcp_type == "GP") %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = sum(appointments))
+
+gp_f2f_advance %>% 
+    plot_time_series(.date_var = appointment_date, .value = appointments, .smooth_period = 65, .smooth_degree = 2)
+
+gp_f2f_advance %>% 
+    filter_by_time(.date_var = appointment_date, .start_date = "2020-08-01") %>% 
+    plot_time_series(.date_var = appointment_date, .value = appointments, .smooth_period = 260, .smooth_degree = 2)
+
+gp_f2f_advance %>%  
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = TRUE
+    )
+
+
+gp_f2f_advance %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2020-08-01") %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = TRUE
+    )
+
+
+```
+
+```{r}
+wakefield_working_week_daily %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "week",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T,
+        .title = "Troughs for total apppointments when weeks that contain holiday "
+    )
+
+wakefield_working_week_daily %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T,
+        .title = ""
+    )
+
+# BY MODE & HCP
+
+wakefield_working_week_daily %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online"),
+           hcp_type != "HCP Type Not Provided") %>%
+    group_by(appt_mode, hcp_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(count_of_appointments)
+    ) %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T,
+        .facet_ncol = 3,
+        .title = ""
+    )
+
+# BY BOOKING & HCP
+
+same_day_vs_booked_daily_tbl %>%
+    filter(!appt_mode %in% c("Unknown", "Video Conference/Online"),
+           hcp_type != "HCP Type Not Provided") %>%
+    group_by(booking, hcp_type) %>% 
+    summarise_by_time(
+        .date_var = appointment_date,
+        .by = "month",
+        appointments = sum(appointments)
+    ) %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = T,
+        .facet_ncol = 3,
+        .title = ""
+    )
+```
+
+# 5: Autocorrelation analysis
 
 I am most interested in Same Day GP appointments broken down into total, face-to-face. and telephone.
 

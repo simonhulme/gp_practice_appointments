@@ -24,7 +24,7 @@ skimr::skim(wakefield_daily)
 
 # 2: Exploratory Visualisation
 
-## 2a: Distribution of appointmentsTotal appointments
+## 2a: Distribution of appointments
 
 ```{r}
 # overall
@@ -109,20 +109,16 @@ wakefield_daily %>%
     labs(title = "Total Appointments by HCP Type")
 ```
 
--   <div>
-
-    ```{r}
-    wakefield_daily %>%
-        group_by(appt_mode) %>%
-        summarise(total_appointments = sum(count_of_appointments)) %>%
-        mutate(appt_mode = fct_reorder(appt_mode, -total_appointments)) %>%
-        ggplot(aes(appt_mode, total_appointments)) +
-        geom_col(fill = "skyblue", color = "grey30") +
-        theme_bw() +
-        labs(title = "Total Appointments by Appointment Mode")
-    ```
-
-    </div>
+```{r}
+wakefield_daily %>%
+    group_by(appt_mode) %>%
+    summarise(total_appointments = sum(count_of_appointments)) %>%
+    mutate(appt_mode = fct_reorder(appt_mode, -total_appointments)) %>%
+    ggplot(aes(appt_mode, total_appointments)) +
+    geom_col(fill = "skyblue", color = "grey30") +
+    theme_bw() +
+    labs(title = "Total Appointments by Appointment Mode")
+```
 
 ```{r}
 wakefield_daily %>%
@@ -511,7 +507,9 @@ total_appts_by_appt_mode %>%
 
 -   both appear to be plateauing since start of 2024
 
-## 3e: Appointments by hcp type, mode, and booking type
+# 4: Time Series Analysis - Sub Groups
+
+## 4a: Compare all subgroups
 
 ```{r}
 total_appts_by_subgroup <-
@@ -562,142 +560,154 @@ total_appts_by_subgroup %>%
 
 -   EACH GROUP SMOOTHED CURVE APPEARS TO HAVE BEEN INFLUENCED BY POTENTIAL ANOMALOUS VALUES LATE 2022 EARLY 2023
 
-## 3f: Appointments by hcp type, mode, and booking type - POST PANDEMIC
+## 4b: GP Face-to-Face
 
 ```{r}
-total_appts_by_subgroup <-
-    wakefield_filtered_daily %>% 
-    filter_by_time(.date_var = appointment_date, .start_date = "2021-08-01") %>% 
-    group_by(appt_mode, hcp_type, booking_type) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "day",
-        appointments = sum(count_of_appointments))
-```
-
-```{r}
-# by month
-total_appts_by_subgroup %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(appointments)) %>% 
-    plot_time_series(.date_var = appointment_date,
-                     .value = appointments,
-                     .trelliscope = TRUE,
-                     .facet_strip_remove = TRUE)
-```
-
-# 4: Analysis of anomalies
-
-LOOK AT TIME SERIES OF SUBGROUPS
-
-```{r}
-gp_f2f_advance <- 
+gp_f2f_weekly <- 
     total_appts_by_subgroup %>% 
-    ungroup() %>% 
-    filter(appt_mode == "Face-to-Face", booking_type == "Same Day", hcp_type == "GP") %>% 
+    filter(appt_mode == "Face-to-Face", hcp_type == "GP") %>% 
+    group_by(booking_type) %>% 
     summarise_by_time(.date_var = appointment_date, .by = "week", appointments = sum(appointments))
-
-gp_f2f_advance %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments, .smooth_period = 65, .smooth_degree = 2)
-
-gp_f2f_advance %>% 
-    filter_by_time(.date_var = appointment_date, .start_date = "2020-08-01") %>% 
-    plot_time_series(.date_var = appointment_date, .value = appointments, .smooth_period = 260, .smooth_degree = 2)
-
-gp_f2f_advance %>%  
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = TRUE
-    )
-
-
-gp_f2f_advance %>%
-    filter_by_time(.date_var = appointment_date, .start_date = "2020-08-01") %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = TRUE
-    )
-
-
 ```
 
 ```{r}
-wakefield_working_week_daily %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
+gp_f2f_weekly %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = appointments,
+        .smooth_period = 65,
+        .smooth_degree = 2,
+        .title = "GP Face-to-Face: Weekly Time Series"
+    )
+```
+
+```{r}
+gp_f2f_weekly %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08-01") %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = appointments,
+        .smooth_period = 260,
+        .smooth_degree = 2, 
+        .title = "GP Face-to-Face Post Pandemic: Weekly Time Series"
+    )
+```
+
+```{r}
+gp_f2f_weekly %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08-01") %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = TRUE,
+        .frequency = 52,
+        .title = "GP Face-to-Face Post Pandemic: Weekly Anomalies"
+    )
+```
+
+## \*\* FINDINGS
+
+## 4c: GP Telephone
+
+```{r}
+gp_telephone_weekly <- 
+    total_appts_by_subgroup %>% 
+    filter(appt_mode == "Telephone", hcp_type == "GP") %>% 
+    group_by(booking_type) %>% 
+    summarise_by_time(.date_var = appointment_date, .by = "week", appointments = sum(appointments))
+```
+
+```{r}
+gp_telephone_weekly %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = appointments,
+        .smooth_period = 65,
+        .smooth_degree = 2,
+        .title = "GP Telephone: Weekly Time Series"
+    )
+```
+
+```{r}
+gp_telephone_weekly %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08-01") %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = appointments,
+        .smooth_period = 260,
+        .smooth_degree = 2, 
+        .title = "GP Telephone Post Pandemic: Weekly Time Series"
+    )
+```
+
+```{r}
+gp_telephone_weekly %>%
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08-01") %>%
+    plot_anomaly_diagnostics(
+        .date_var = appointment_date,
+        .value = appointments,
+        .alpha = 0.05,
+        .interactive = TRUE,
+        .frequency = 52,
+        .title = "GP Telephone Post Pandemic: Weekly Anomalies"
+    )
+```
+
+## \*\* FINDINGS
+
+## 4d: Proportion Same Day vs Advance Booked over Time
+
+```{r}
+gp_appts_percent_sameday_weekly <- 
+    total_appts_by_subgroup %>%
+    filter(hcp_type == "GP") %>%
+    group_by(booking_type) %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "week",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .title = "Troughs for total apppointments when weeks that contain holiday "
-    )
-
-wakefield_working_week_daily %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .title = ""
-    )
-
-# BY MODE & HCP
-
-wakefield_working_week_daily %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online"),
-           hcp_type != "HCP Type Not Provided") %>%
-    group_by(appt_mode, hcp_type) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
-        appointments = sum(count_of_appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
-        .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .facet_ncol = 3,
-        .title = ""
-    )
-
-# BY BOOKING & HCP
-
-same_day_vs_booked_daily_tbl %>%
-    filter(!appt_mode %in% c("Unknown", "Video Conference/Online"),
-           hcp_type != "HCP Type Not Provided") %>%
-    group_by(booking, hcp_type) %>% 
-    summarise_by_time(
-        .date_var = appointment_date,
-        .by = "month",
         appointments = sum(appointments)
-    ) %>%
-    plot_anomaly_diagnostics(
+    ) %>% 
+    pivot_wider(names_from = booking_type, values_from = appointments) %>% 
+    mutate(same_day_proportion = `Same Day` / (`Same Day` + Advance),
+           same_day_percent = round(same_day_proportion * 100, 2)) %>% 
+    select(appointment_date, same_day_percent)
+```
+
+```{r}
+gp_appts_percent_sameday_weekly %>% 
+    plot_time_series(.date_var = appointment_date, .value = same_day_percent)
+```
+
+```{r}
+gp_appts_percent_sameday_post_pandemic_weekly <- 
+    gp_appts_percent_sameday_weekly %>% 
+    filter_by_time(.date_var = appointment_date, .start_date = "2021-08-01")
+    
+gp_appts_percent_sameday_post_pandemic_weekly %>% 
+    plot_time_series(.date_var = appointment_date, .value = same_day_percent, 
+                     .y_lab = "Percent Same Day",
+                     .title = "Percent Total Appts booked on Same Day Post-Pandemic: Weekly")
+```
+
+```{r}
+gp_appts_percent_sameday_post_pandemic_weekly %>%
+    summarise_by_time(
         .date_var = appointment_date,
-        .value = appointments,
-        .alpha = 0.05,
-        .interactive = T,
-        .facet_ncol = 3,
-        .title = ""
+        .by = "month",
+        same_day_percent = mean(same_day_percent)
+    ) %>%
+    plot_time_series(
+        .date_var = appointment_date,
+        .value = same_day_percent,
+        .y_lab = "Percent Same Day",
+        .title = "Percent Total Appts booked on Same Day Post-Pandemic: Monthly"
     )
 ```
+
+## \*\* FINDINGS
+
+NOT FINISHED SECTIONS BELOW HERE
 
 # 5: Autocorrelation analysis
 
@@ -775,9 +785,6 @@ gp_appt_mode_vs_booking_tbl %>%
 ```
 
 ```{r}
-
-
-
 same_day_vs_booked_daily_tbl %>%
     filter(!appt_mode %in% c("Unknown", "Video Conference/Online")) %>%
     plot_seasonal_diagnostics(
@@ -855,9 +862,16 @@ same_day_vs_booked_daily_tbl %>%
 
 ```
 
-# 
-
 ## Correlation
+
+```{r}
+total_appts_by_subgroup %>% 
+    pivot_wider(id_cols = appointment_date, names_from = c(hcp_type, appt_mode, booking_type), values_from = appointments) %>%
+    select(-appointment_date) %>% 
+    cor() %>% 
+    corrplot::corrplot()
+    
+```
 
 ```{r}
 attended_daily_tbl %>% 

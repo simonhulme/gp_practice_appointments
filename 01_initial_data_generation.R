@@ -32,19 +32,17 @@ write_rds(wakefield_daily_raw, "00_data/raw/wakefield_daily_raw.rds")
 
 # Events data ----
 
-# events include weekends, bank holidays and training days
-
-start_date <- min(wakefield_daily_raw$appointment_date)
-end_date   <- max(wakefield_daily_raw$appointment_date)
+# events include weekends, bank holidays and training days up to end of 2024
 
 ## Calendar features: Weekends & Bank Holidays ----
 
-weekend_dates <- 
-    tk_make_weekend_sequence(start_date = start_date, end_date = end_date)
+weekend_dates <-
+    tk_make_weekend_sequence(start_date = "2019", 
+                             end_date = "2024")
 
 bank_holiday_dates <-
-    tk_make_holiday_sequence(start_date = start_date,
-                             end_date = end_date,
+    tk_make_holiday_sequence(start_date = "2019",
+                             end_date = "2024",
                              calendar = "LONDON")
 
 ## Training Half Days ----
@@ -132,14 +130,13 @@ training_dates <-
 
 ## Merge into single events data set ----
 
-wakefield_events <-
-    wakefield_daily_raw %>% 
-    select(appointment_date) %>% 
-    distinct(appointment_date) %>% 
+wakefield_events <- 
+    tibble(
+        event_date = tk_make_timeseries(start_date = "2019", end_date = "2024")) %>%
     mutate(
-        weekend      = appointment_date %in% weekend_dates,
-        bank_holiday = appointment_date %in% bank_holiday_dates,
-        training     = appointment_date %in% training_dates
+        weekend      = as.integer(event_date %in% weekend_dates),
+        bank_holiday = as.integer(event_date %in% bank_holiday_dates),
+        training     = as.integer(event_date %in% training_dates)
     )
 
 ## Save Data ----

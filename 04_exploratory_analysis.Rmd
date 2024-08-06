@@ -7,16 +7,16 @@ output: html_notebook
 library(tidyverse)
 library(timetk)
 
-wakefield_daily <- read_rds("00_data/processed/wakefield_daily_adjusted.rds")
+appointments_tbl <- read_rds("00_data/processed/wakefield_weekdays_full.rds")
 ```
 
 # 1: Summary Statistics
 
 ```{r}
-skimr::skim(wakefield_daily)
+skimr::skim(appointments_tbl)
 ```
 
--   1373 days between 2019-03-01 and 2024-06-28
+-   1391 days between 2019-03-01 and 2024-06-28
 
 -   numeric response variable with no missing values
 
@@ -29,7 +29,7 @@ skimr::skim(wakefield_daily)
 ```{r}
 # overall
 total_daily_appointments <- 
-    wakefield_daily %>%
+    appointments_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
@@ -50,7 +50,7 @@ total_daily_appointments %>%
 
 ```{r}
 gp_daily_appointments <- 
-    wakefield_daily %>%
+    appointments_tbl %>%
     filter(hcp_type == "GP") %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -72,7 +72,7 @@ gp_daily_appointments %>%
 
 ```{r}
 other_staff_daily_appointments <- 
-    wakefield_daily %>%
+    appointments_tbl %>%
     filter(hcp_type == "Other Practice staff") %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -99,7 +99,7 @@ other_staff_daily_appointments %>%
 ## 2b: Total Appointments by Feature
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     group_by(hcp_type) %>%
     summarise(total_appointments = sum(count_of_appointments)) %>%
     mutate(hcp_type = fct_reorder(hcp_type, -total_appointments)) %>%
@@ -110,7 +110,7 @@ wakefield_daily %>%
 ```
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     group_by(appt_mode) %>%
     summarise(total_appointments = sum(count_of_appointments)) %>%
     mutate(appt_mode = fct_reorder(appt_mode, -total_appointments)) %>%
@@ -121,7 +121,7 @@ wakefield_daily %>%
 ```
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     group_by(appt_status) %>%
     summarise(total_appointments = sum(count_of_appointments)) %>%
     mutate(appt_status = fct_reorder(appt_status, -total_appointments)) %>%
@@ -132,7 +132,7 @@ wakefield_daily %>%
 ```
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     group_by(time_between_book_and_appt) %>%
     summarise(total_appointments = sum(count_of_appointments)) %>%
     ggplot(aes(time_between_book_and_appt, total_appointments)) +
@@ -142,7 +142,7 @@ wakefield_daily %>%
     labs(title = "Total Appointments by Time Between Booking and Appointment Date",
          x = "Time between booking and appointment date")
 
-wakefield_daily %>%
+appointments_tbl %>%
     mutate(
         booking_type = if_else(
             time_between_book_and_appt == "Same Day",
@@ -170,12 +170,12 @@ wakefield_daily %>%
 
 -   Same day most frequent category of time between booking and appointment date
 
-    -    Overall more appointments advance booked where all non same day appointments aggregated
+    -   Overall more appointments advance booked where all non same day appointments aggregated
 
 ## 2c: Appointments vs. HCP Type by Feature
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     filter(hcp_type == "GP" | hcp_type == "Other Practice staff",
            appt_mode %in% c("Face-to-Face", "Telephone")) %>% 
     group_by(hcp_type, appt_mode) %>%
@@ -188,7 +188,7 @@ wakefield_daily %>%
 ```
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     filter(hcp_type == "GP" | hcp_type == "Other Practice staff",
            appt_mode %in% c("Face-to-Face", "Telephone")) %>% 
     group_by(hcp_type, appt_status) %>%
@@ -201,7 +201,7 @@ wakefield_daily %>%
 ```
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     filter(hcp_type == "GP" | hcp_type == "Other Practice staff") %>% 
     group_by(hcp_type, time_between_book_and_appt) %>%
     summarise(total_appointments = sum(count_of_appointments)) %>%
@@ -211,7 +211,7 @@ wakefield_daily %>%
     theme_bw() +
     tidyquant::scale_fill_tq()
 
-wakefield_daily %>%
+appointments_tbl %>%
     filter(hcp_type == "GP" | hcp_type == "Other Practice staff") %>% 
     group_by(hcp_type, time_between_book_and_appt) %>%
     summarise(total_appointments = sum(count_of_appointments)) %>%
@@ -223,7 +223,7 @@ wakefield_daily %>%
     xlab("Time between booking and appointment date") +
     tidyquant::scale_fill_tq()
 
-wakefield_daily %>%
+appointments_tbl %>%
     filter(hcp_type == "GP" |
                hcp_type == "Other Practice staff") %>%
     mutate(booking_type = if_else(time_between_book_and_appt == "Same Day",
@@ -241,7 +241,7 @@ wakefield_daily %>%
 ```
 
 ```{r}
-wakefield_daily %>%
+appointments_tbl %>%
     filter(hcp_type == "GP" | hcp_type == "Other Practice staff") %>%   
     mutate(appt_status = fct_relevel(appt_status, c("Attended", "Unknown", "DNA"))) %>%
     group_by(hcp_type, appt_status, time_between_book_and_appt) %>%
@@ -276,8 +276,8 @@ Look at total appointments plus subgroups - GP vs. Other practice staff, telepho
 ## 3a: Total Appointments
 
 ```{r}
-wakefield_filtered_daily <-
-    wakefield_daily %>%
+appointments_filtered_tbl <-
+    appointments_tbl %>%
     filter(
         hcp_type == "GP" | hcp_type == "Other Practice staff",
         appt_status == "Attended",
@@ -290,7 +290,7 @@ wakefield_filtered_daily <-
 ```
 
 ```{r}
-wakefield_filtered_daily %>%
+appointments_filtered_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "day",
@@ -302,7 +302,7 @@ wakefield_filtered_daily %>%
 ```
 
 ```{r}
-wakefield_filtered_daily %>%
+appointments_filtered_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "week",
@@ -314,7 +314,7 @@ wakefield_filtered_daily %>%
 ```
 
 ```{r}
-wakefield_filtered_daily %>%
+appointments_filtered_tbl %>%
     summarise_by_time(
         .date_var = appointment_date,
         .by = "month",
@@ -337,7 +337,7 @@ wakefield_filtered_daily %>%
 
 ```{r}
 total_appts_by_hcp <-
-    wakefield_filtered_daily %>% 
+    appointments_filtered_tbl %>% 
     group_by(hcp_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -398,7 +398,7 @@ total_appts_by_hcp %>%
 
 ```{r}
 total_appts_by_booking_type <-
-    wakefield_filtered_daily %>% 
+    appointments_filtered_tbl %>% 
     group_by(booking_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -452,7 +452,7 @@ total_appts_by_booking_type %>%
 
 ```{r}
 total_appts_by_appt_mode <-
-    wakefield_filtered_daily %>% 
+    appointments_filtered_tbl %>% 
     group_by(appt_mode) %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -513,7 +513,7 @@ total_appts_by_appt_mode %>%
 
 ```{r}
 total_appts_by_subgroup <-
-    wakefield_filtered_daily %>% 
+    appointments_filtered_tbl %>% 
     group_by(appt_mode, hcp_type, booking_type) %>% 
     summarise_by_time(
         .date_var = appointment_date,
@@ -687,7 +687,7 @@ gp_appts_percent_sameday_post_pandemic_weekly <-
 gp_appts_percent_sameday_post_pandemic_weekly %>% 
     plot_time_series(.date_var = appointment_date, .value = same_day_percent, 
                      .y_lab = "Percent Same Day",
-                     .title = "Percent Total Appts booked on Same Day Post-Pandemic: Weekly")
+                     .title = "Percent GP Appts booked on Same Day Post-Pandemic: Weekly")
 ```
 
 ```{r}
@@ -701,7 +701,7 @@ gp_appts_percent_sameday_post_pandemic_weekly %>%
         .date_var = appointment_date,
         .value = same_day_percent,
         .y_lab = "Percent Same Day",
-        .title = "Percent Total Appts booked on Same Day Post-Pandemic: Monthly"
+        .title = "Percent GP Appts booked on Same Day Post-Pandemic: Monthly"
     )
 ```
 

@@ -142,31 +142,10 @@ wakefield_events <-
 ## Save Data ----
 write_rds(wakefield_events, "00_data/processed/wakefield_events.rds") 
 
-# External features ----
-
 # External Regressors ----
 
 ## Population ----
 
-# wakefield_population_daily <- 
-#     tk_make_timeseries(start_date = "2019-05-01", end_date = "2024-05-01") %>% 
-#     as_tibble_col(column_name = "appointment_date") %>% 
-#     left_join(wakefield_population_monthly, by = c("appointment_date" = "extract_date")) %>% 
-#     fill(registered_population)
-# 
-# wakefield_working_week_with_calendar_adjustments_and_population <-
-#     wakefield_population_daily %>%
-#     inner_join(wakefield_working_week_with_calendar_adjustments)
-# 
-# ## Workforce ----
-# 
-# wakefield_workforce_daily <- 
-#     tk_make_timeseries(start_date = "2020-09-01", end_date = "2024-05-01") %>% 
-#     as_tibble_col(column_name = "appointment_date") %>% 
-#     left_join(wakefield_workforce_monthly, by = c("appointment_date" = "extract_date")) %>% 
-#     fill(contains("total"))
-# 
-# wakefield_working_week_with_calendar_adjustments_population_workforce <- 
-#     wakefield_workforce_daily %>% 
-#     inner_join(wakefield_working_week_with_calendar_adjustments_and_population)
+
+## Workforce ----
 

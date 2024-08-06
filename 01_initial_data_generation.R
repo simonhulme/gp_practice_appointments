@@ -6,6 +6,7 @@ library(rvest)
 
 # Appointments Data ----
 source("00_scripts/collect_gp_appointment_data.R")
+
 options(timeout = max(300, getOption("timeout")))
 
 urls <- c(
@@ -146,6 +147,15 @@ write_rds(wakefield_events, "00_data/processed/wakefield_events.rds")
 
 ## Population ----
 
+source("00_scripts/get_monthly_population_by_area.R")
+
+wakefield_population_monthly <- 
+    get_monthly_population_by_area(area_code = "03R", start_date = "2019-05-01", end_date = "2024-07-01")
+
+wakefield_population_monthly
+
+## save data
+write_rds(wakefield_population_monthly, "00_data/processed/wakefield_population_monthly.rds")
 
 ## Workforce ----
 

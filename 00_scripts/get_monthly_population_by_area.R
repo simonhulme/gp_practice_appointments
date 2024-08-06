@@ -132,8 +132,3 @@ get_monthly_population_by_area <- function(area_code, start_date, end_date) {
    return(population_by_area)
 
 }
-
-
-csv_files <- get_monthly_population_by_area(area_code = "03R", start_date = "2019-05-01", end_date = "2024-07-01")
-
-csv_files

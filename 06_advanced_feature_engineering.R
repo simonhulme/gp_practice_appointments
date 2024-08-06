@@ -234,5 +234,51 @@ forecast_tbl %>% plot_modeltime_forecast()
 
 calibration_tbl %>% modeltime_accuracy(new_data = testing(splits))
 
+## model 2 appears to be most accurate
 
+## try different type of model
 
+model_spec_poisson <- poisson_reg() %>% set_engine("glm")
+
+recipe_poisson_linear_trend_events_time_lag <- 
+    recipe(appointments ~. , training(splits)) %>% 
+    step_mutate(index_num = as.numeric(appointment_date)) %>% 
+    step_normalize(index_num) %>% 
+    step_date(appointment_date, features = c("dow", "month")) %>% 
+    step_rm(appointment_date, contains("lag40")) %>%  
+    step_naomit(starts_with("lag_"))
+
+workflow_fit_poisson_linear_events_time_lag <- workflow() %>% 
+    add_model(model_spec_poisson) %>% 
+    add_recipe(recipe_linear_trend_events_time_lag) %>% 
+    fit(training(splits))
+
+recipe_poisson_splines_events_time_lag <- 
+    recipe(appointments ~. , training(splits)) %>% 
+    step_mutate(index_num = as.numeric(appointment_date)) %>% 
+    step_normalize(index_num) %>% 
+    step_ns(index_num, deg_free = 4) %>% 
+    step_date(appointment_date, features = c("dow", "month")) %>% 
+    step_rm(appointment_date, contains("lag40")) %>%  
+    step_naomit(starts_with("lag_"))
+
+workflow_fit_poisson_splines_time_lag <- workflow() %>% 
+    add_model(model_spec_poisson) %>% 
+    add_recipe(recipe_poisson_splines_events_time_lag) %>% 
+    fit(training(splits))
+
+calibration_tbl <-
+    modeltime_table(
+        workflow_fit_linear_events_time, 
+        workflow_fit_linear_events_time_lag,
+        workflow_fit_poisson_linear_events_time_lag,
+        workflow_fit_poisson_splines_time_lag
+    ) %>%
+    modeltime_calibrate(new_data = testing(splits))
+
+forecast_tbl <- calibration_tbl %>%
+    modeltime_forecast(new_data = testing(splits), actual_data = train_test_tbl, conf_interval = 0.9)
+
+forecast_tbl %>% plot_modeltime_forecast()
+
+calibration_tbl %>% modeltime_accuracy(new_data = testing(splits))

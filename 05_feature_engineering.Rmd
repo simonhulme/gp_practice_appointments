@@ -128,7 +128,19 @@ rm(
 
 ```{r}
 ## save new objects
-# write_rds(gp_appts_attended_tbl, "00_data/processed/wakefield_gp_attended_post_pandemic.rds")
+
+gp_appts_attended_objects <- 
+    list(
+        data = 
+            list(data_prepared_full_tbl = data_prepared_full_tbl,
+                 train_test_tbl         = train_test_tbl,
+                 train_tbl              = train_tbl, 
+                 test_tbl               = test_tbl,
+                 forecast_tbl           = forecast_tbl),
+        params = params
+    )
+
+write_rds(gp_appts_attended_objects, "00_data/processed/gp_appts_attended_objects.rds")
 ```
 
 ### Visualise Time Series

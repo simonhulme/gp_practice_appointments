@@ -54,6 +54,9 @@ gp_appts_attended_tbl <-
         .by = "day",
         appointments = sum(count_of_appointments)
     ) 
+
+gp_appts_attended_tbl %>% 
+    plot_time_series(.date_var = appointment_date, .value = appointments)
 ```
 
 ```{r}

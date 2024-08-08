@@ -355,8 +355,6 @@ forecast_values_tbl <-
                  ~ box_cox_inv_vec(.x,
                                    lambda = objects$params$box_cox$lambda)))
 
-
-
 forecast_values_tbl %>% 
     plot_modeltime_forecast()
 
